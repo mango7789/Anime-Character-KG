@@ -1,15 +1,39 @@
 ## Anime Characters Knowledge Graph
 
 
-### 安装依赖
+### 前端
 
-```
-npm i react-force-graph-2d
-```
-
-### 项目运行
 ```
 cd kg-ui
+npm i react-force-graph-2d
 npm run dev
 ```
 
+### neo4j
+
+```
+docker pull neo4j:5
+docker run \
+  --runtime=runc \
+  --name neo4j-anime \
+  -p 7474:7474 \
+  -p 7688:7687 \
+  -e NEO4J_AUTH=neo4j/anime123 \
+  -d neo4j:5
+```
+
+也可以直接通过 http://10.176.40.144:7474/browser/ 访问，需要在校园网环境下，账号密码是 neo4j 和 anime123
+
+### 后端
+
+配置 python 环境
+```
+conda env create -f environment.yml
+conda activate Anime
+```
+
+启动后端服务
+```
+cd kg-backend
+python run.py
+```

@@ -31,3 +31,26 @@ def search_characters():
     limit = int(request.args.get("limit", 10))
     results = driver.search_characters(keyword, limit)
     return jsonify(results)
+
+
+@bp.route("/recommend", methods=["POST"])
+def recommend():
+    data = request.get_json()
+    name = data.get("name")
+    limit = data.get("limit", 5)
+
+    if not name:
+        return jsonify({"error": "Missing 'name' parameter"}), 400
+
+    query = """
+        MATCH (c:Character {name:$name})-[:FRIEND_OF]->(f)-[:FRIEND_OF]->(rec)
+        WHERE NOT (c)-[:FRIEND_OF]->(rec) AND c <> rec
+        RETURN rec.name AS name, COUNT(*) AS score
+        ORDER BY score DESC
+        LIMIT $limit
+    """
+
+    result = driver.run(query, name=name, limit=limit)
+    recommendations = [{"name": r["name"], "score": r["score"]} for r in result]
+
+    return jsonify(recommendations)

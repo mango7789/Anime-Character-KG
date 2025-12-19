@@ -245,3 +245,10 @@ hr.sep { border: none; border-top: 1px solid var(--border); margin: 0; }
 @keyframes spin { to { transform: rotate(360deg); } }
 
 .notice { color: var(--muted); font-size: 12px; line-height: 1.4; }
+
+.sidebar-divider {
+  border: none;
+  border-top: 1px solid rgba(255,255,255,.08);
+  margin: 12px 0 16px;
+}
+

@@ -5,6 +5,7 @@ from .routes import bp
 
 def create_app():
     app = Flask(__name__)
+    app.config["JSON_AS_ASCII"] = False
     # Allow communication cross domains
     CORS(app)
 

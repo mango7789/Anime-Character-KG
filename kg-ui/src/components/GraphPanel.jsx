@@ -1,161 +1,357 @@
-import React, { useEffect, useMemo, useRef, useState } from 'react'
-import ForceGraph2D from 'react-force-graph-2d'
+// src/components/GraphPanel.jsx
+import React, {
+  useEffect,
+  useRef,
+  useState,
+  useLayoutEffect,
+  useMemo,
+} from "react";
+import ForceGraph2D from "react-force-graph-2d";
 
-function buildIndex(nodes) {
-  const m = new Map()
-  for (const n of nodes || []) m.set(String(n.id), n)
-  return m
-}
+// 可选调色板
+const COLOR_PALETTE = [
+  "#1f77b4",
+  "#ff7f0e",
+  "#2ca02c",
+  "#d62728",
+  "#9467bd",
+  "#8c564b",
+  "#e377c2",
+  "#7f7f7f",
+  "#bcbd22",
+  "#17becf",
+];
 
-const DEFAULT_GRAPH = {
-  nodes: [
-    { id: 1, name: 'Alice', group: 'person' },
-    { id: 2, name: 'Bob', group: 'person' },
-    { id: 3, name: 'Carol', group: 'person' }
-  ],
-  links: [
-    { source: 1, target: 2, type: 'friend' },
-    { source: 2, target: 3, type: 'colleague' }
-  ]
-}
+function GraphPanel({ graph, store, focusNodeIds }) {
+  const fgRef = useRef(null);
+  const panelRef = useRef(null);
 
-export default function GraphPanel({ graph, focusNodeIds }) {
-  const fgRef = useRef(null)
-  const [hoverNode, setHoverNode] = useState(null)
+  const [hoverNode, setHoverNode] = useState(null);
+  const [hoverPos, setHoverPos] = useState({ x: 0, y: 0 });
+  const [selectedNode, setSelectedNode] = useState(null);
+  const [dimensions, setDimensions] = useState({ width: 400, height: 600 });
+  const [searchValue, setSearchValue] = useState("");
+  const [originalGraph, setOriginalGraph] = useState(graph);
 
-  /** ✅ graph 为空时，使用默认图 */
-  const graphData =
-    graph && graph.nodes && graph.nodes.length > 0 ? graph : DEFAULT_GRAPH
+  const { setGraph } = store;
 
-  const nodeIndex = useMemo(
-    () => buildIndex(graphData.nodes),
-    [graphData.nodes]
-  )
+  // 根据 graph.nodes 自动生成 group -> color 映射
+  const groupColorMap = useMemo(() => {
+    const groups = Array.from(
+      new Set((graph.nodes || []).map((n) => n.group || "default"))
+    );
+    const map = {};
+    groups.forEach((g, idx) => {
+      map[g] = COLOR_PALETTE[idx % COLOR_PALETTE.length];
+    });
+    return map;
+  }, [graph.nodes]);
 
+  // 第一次加载时记录 originalGraph
   useEffect(() => {
-    if (!fgRef.current || !graphData.nodes.length) return
+    if (!originalGraph || originalGraph.nodes.length === 0) {
+      setOriginalGraph(graph);
+    }
+  }, [graph, originalGraph]);
 
-    const fg = fgRef.current
-    const ids = (focusNodeIds || []).map(String)
-    const hasFocus = ids.length > 0 && ids.some(id => nodeIndex.has(id))
+  // 监听 div 尺寸变化
+  useLayoutEffect(() => {
+    const updateDimensions = () => {
+      if (panelRef.current) {
+        setDimensions({
+          width: panelRef.current.clientWidth,
+          height: panelRef.current.clientHeight,
+        });
+      }
+    };
+    updateDimensions();
+    window.addEventListener("resize", updateDimensions);
+    return () => window.removeEventListener("resize", updateDimensions);
+  }, []);
 
-    const t = setTimeout(() => {
-      try {
-        // 合理 padding，避免缩得过小
-        fg.zoomToFit(200, 300)
+  // 计算图中心
+  const getGraphCenter = (g = graph) => {
+    if (!g?.nodes || g.nodes.length === 0) return { x: 0, y: 0 };
+    const avgX =
+      g.nodes.reduce((sum, n) => sum + (n.x ?? 0), 0) / g.nodes.length;
+    const avgY =
+      g.nodes.reduce((sum, n) => sum + (n.y ?? 0), 0) / g.nodes.length;
+    return { x: avgX, y: avgY };
+  };
 
-        if (hasFocus) {
-          const focusNodes = ids
-            .map(id => nodeIndex.get(id))
-            .filter(Boolean)
+  // 重置视图
+const resetGraphView = () => {
+  const fg = fgRef.current;
+  if (!fg || !originalGraph) return;
 
-          const cx =
-            focusNodes.reduce((s, n) => s + (n.x || 0), 0) /
-            focusNodes.length
-          const cy =
-            focusNodes.reduce((s, n) => s + (n.y || 0), 0) /
-            focusNodes.length
+  setGraph(originalGraph);
+  setSelectedNode(null);
+  setSearchValue("");
 
-          fg.centerAt(cx, cy, 500)
-        }
-      } catch { }
-    }, 120)
+  const center = getGraphCenter(originalGraph);
+  fg.centerAt(center.x, center.y, 500);
+  fg.zoom(2, 500);
+};
 
-    return () => clearTimeout(t)
-  }, [graphData, focusNodeIds, nodeIndex])
+  const handleSearchEnter = (e) => {
+    if (e.key === "Enter" && searchValue.trim() !== "") {
+      const node = graph.nodes.find(
+        (n) =>
+          n.name.toLowerCase() === searchValue.trim().toLowerCase() ||
+          n.id.toString() === searchValue.trim()
+      );
+      if (node && fgRef.current) {
+        setSelectedNode(node);
+        fgRef.current.centerAt(node.x, node.y, 500);
+      }
+    }
+  };
 
+  // 绘制节点
   const paintNode = (node, ctx, globalScale) => {
-    const label = node.name || node.id
-    const fontSize = Math.max(10, 12 / globalScale)
-    ctx.font = `${fontSize}px sans-serif`
+    const r = 5;
 
-    const r = 8
-    ctx.beginPath()
-    ctx.arc(node.x, node.y, r, 0, 2 * Math.PI)
-    ctx.fillStyle =
-      node === hoverNode
-        ? 'rgba(255,255,255,0.95)'
-        : 'rgba(255,255,255,0.75)'
-    ctx.fill()
+    ctx.beginPath();
+    ctx.arc(node.x, node.y, r, 0, 2 * Math.PI);
 
-    const textWidth = ctx.measureText(label).width
-    const pad = 3
+    // 使用 groupColorMap 映射
+    let fillColor = groupColorMap[node.group || "default"] || "#888";
 
-    ctx.fillStyle = 'rgba(0,0,0,0.4)'
-    ctx.fillRect(
-      node.x + r + 4,
-      node.y - fontSize / 2 - pad,
-      textWidth + pad * 2,
-      fontSize + pad * 2
-    )
+    if (selectedNode && node !== selectedNode) {
+      // 其他节点透明度降低
+      const hex = fillColor.replace("#", "");
+      fillColor = `#${hex}66`;
+    }
+    // 选中节点保持原来的颜色，不改变
+    ctx.fillStyle = fillColor;
+    ctx.fill();
 
-    ctx.fillStyle = '#e8eeff'
-    ctx.fillText(label, node.x + r + 4 + pad, node.y + fontSize / 2)
-  }
+    // 绘制 label
+    const label = node.name || node.id;
+    const fontSize = Math.max(8, 10 / globalScale);
+    ctx.font = `${fontSize}px sans-serif`;
+    let showLabel = true;
+    if (selectedNode && node !== selectedNode) {
+      const isNeighbor = graph.links.some(
+        (l) =>
+          (l.source.id === selectedNode.id && l.target.id === node.id) ||
+          (l.target.id === selectedNode.id && l.source.id === node.id)
+      );
+      if (!isNeighbor) showLabel = false;
+    }
+
+    if (showLabel) {
+      const textWidth = ctx.measureText(label).width;
+      const pad = 2;
+      ctx.fillStyle = "rgba(0,0,0,0.4)";
+      ctx.fillRect(
+        node.x + r + 4,
+        node.y - fontSize / 2 - pad,
+        textWidth + pad * 2,
+        fontSize + pad * 2
+      );
+      ctx.fillStyle = "#e8eeff";
+      ctx.fillText(label, node.x + r + 4 + pad, node.y + fontSize / 2);
+    }
+  };
 
   return (
     <div
+      ref={panelRef}
       className="panel"
+      onMouseMove={(e) => setHoverPos({ x: e.clientX, y: e.clientY })}
       style={{
-        display: 'flex',
-        flexDirection: 'column',
+        display: "flex",
+        flexDirection: "column",
         flex: 1,
-        minHeight: 0
+        minWidth: 0,
+        minHeight: 0,
+        position: "relative",
       }}
     >
-      {/* header */}
-      <div className="panel-header">
+      <div
+        className="panel-header"
+        style={{ display: "flex", alignItems: "center", gap: 8 }}
+      >
         <div className="title">图谱子图（可拖动 / 缩放）</div>
-        <div style={{ display: 'flex', gap: 8 }}>
+
+        {/* 搜索 + Reset 包裹 */}
+        <div style={{ display: "flex", alignItems: "center", height: 32 }}>
+          {/* Reset 按钮 */}
           <button
             className="icon-btn"
-            onClick={() => fgRef.current?.zoomToFit(60, 400)}
+            onClick={() => {
+              resetGraphView();
+              setSearchValue(""); // 点击 Reset 清空搜索框
+            }}
+            style={{
+              margin: 0,
+              borderRadius: "4px 0 0 4px",
+              height: "100%", // 与搜索框高度一致
+              padding: "0 12px",
+              fontSize: 14,
+            }}
           >
-            Fit
+            重置
           </button>
-          <button
-            className="icon-btn"
-            onClick={() => fgRef.current?.zoom(1, 400)}
-          >
-            1x
-          </button>
+
+          {/* 搜索框 */}
+          <div style={{ position: "relative", height: "100%" }}>
+            <input
+              type="text"
+              list="nodes-list"
+              placeholder="搜索节点..."
+              value={searchValue}
+              onChange={(e) => setSearchValue(e.target.value)}
+              onKeyDown={handleSearchEnter}
+              style={{
+                padding: "0 24px 0 6px",
+                fontSize: 14,
+                borderRadius: "0 4px 4px 0",
+                border: "1px solid #ccc",
+                backgroundColor: "#2c2c2c",
+                color: "#fff",
+                height: "100%",
+              }}
+            />
+            {/* 清空按钮 */}
+            {searchValue && (
+              <span
+                onClick={() => setSearchValue("")}
+                style={{
+                  position: "absolute",
+                  right: 4,
+                  top: "50%",
+                  transform: "translateY(-50%)",
+                  cursor: "pointer",
+                  color: "#aaa",
+                  fontWeight: "bold",
+                  userSelect: "none",
+                }}
+              >
+                ×
+              </span>
+            )}
+          </div>
+
+          <datalist id="nodes-list">
+            {graph.nodes.map((n) => (
+              <option key={n.id} value={n.name} />
+            ))}
+          </datalist>
         </div>
       </div>
 
+      {/* Legend */}
+      <div
+        style={{
+          marginTop: 4,
+          marginBottom: 4,
+          display: "flex",
+          flexWrap: "wrap",
+          gap: 8,
+          paddingLeft: 8,
+          paddingRight: 8,
+        }}
+      >
+        {Object.entries(groupColorMap).map(([group, color]) => (
+          <div
+            key={group}
+            style={{ display: "flex", alignItems: "center", gap: 4 }}
+          >
+            <span
+              style={{
+                width: 12,
+                height: 12,
+                backgroundColor: color,
+                display: "inline-block",
+              }}
+            />
+            <span>{group}</span>
+          </div>
+        ))}
+      </div>
+
+      {/* HTML Tooltip */}
+      {hoverNode && (
+        <div
+          style={{
+            position: "fixed",
+            left: hoverPos.x + 12,
+            top: hoverPos.y + 12,
+            background: "rgba(0,0,0,0.85)",
+            color: "#fff",
+            padding: "6px 8px",
+            fontSize: 14,
+            borderRadius: 5,
+            pointerEvents: "none",
+            whiteSpace: "pre-line",
+            zIndex: 1000,
+            maxWidth: 250,
+            lineHeight: 1.4,
+          }}
+        >
+          <div
+            style={{
+              fontWeight: 700,
+              fontSize: 15,
+              marginBottom: 4,
+              color: groupColorMap[hoverNode.group || "default"] || "#fff",
+            }}
+          >
+            {hoverNode.name || hoverNode.id} ({hoverNode.group || ""})
+          </div>
+          {hoverNode.properties && (
+            <div>
+              {Object.entries(hoverNode.properties).map(([k, v]) => (
+                <div key={k}>
+                  <strong>{k}</strong>: {Array.isArray(v) ? v.join("、") : v}
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+
       <ForceGraph2D
         ref={fgRef}
-        style={{ flex: 1 }}
-        graphData={graphData}
+        width={dimensions.width}
+        height={dimensions.height}
+        graphData={graph}
         enableNodeDrag
         cooldownTime={1000}
-
-        /** 边：明确样式，保证可见 */
         linkWidth={2}
-        linkColor={() => 'rgba(255,255,255,0.6)'}
+        linkColor={(link) => {
+          if (!selectedNode) return "rgba(255,255,255,0.6)";
+          if (
+            link.source.id === selectedNode.id ||
+            link.target.id === selectedNode.id
+          ) {
+            return "rgba(255,255,255,0.8)";
+          }
+          return "rgba(255,255,255,0.1)";
+        }}
         linkDirectionalArrowLength={6}
         linkDirectionalArrowRelPos={1}
         linkCurvature={0.08}
-        linkLabel={l => l.type || ''}
-
-        nodeLabel={n =>
-          `${n.name || n.id}${n.group ? `\n(${n.group})` : ''}`
-        }
-
-        onNodeHover={n => setHoverNode(n || null)}
-        onNodeClick={n => {
-          if (!fgRef.current || !n) return
-          fgRef.current.centerAt(n.x, n.y, 500)
-          fgRef.current.zoom(2, 500)
+        linkLabel={(l) => l.type || ""}
+        onNodeHover={(node) => setHoverNode(node || null)}
+        onNodeClick={(n) => {
+          if (!fgRef.current || !n) return;
+          setSelectedNode(n);
+          fgRef.current.centerAt(n.x, n.y, 500);
         }}
-
         nodeCanvasObject={paintNode}
         nodePointerAreaPaint={(node, color, ctx) => {
-          ctx.fillStyle = color
-          ctx.beginPath()
-          ctx.arc(node.x, node.y, 10, 0, 2 * Math.PI)
-          ctx.fill()
+          ctx.fillStyle = color;
+          ctx.beginPath();
+          ctx.arc(node.x, node.y, 10, 0, 2 * Math.PI);
+          ctx.fill();
         }}
+        nodeLabel={null}
       />
     </div>
-  )
+  );
 }
+
+export default GraphPanel;

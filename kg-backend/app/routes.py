@@ -1,14 +1,10 @@
 from flask import Blueprint, jsonify, request
 from .neo4j_driver import Neo4jDriver
+from .constants import DEFAULT_GRAPH
 
 bp = Blueprint("api", __name__, url_prefix="/api")
 
-# Neo4j 配置
-NEO4J_URI = "bolt://localhost:7687"
-NEO4J_USER = "neo4j"
-NEO4J_PASSWORD = "anime123"
-
-driver = Neo4jDriver(NEO4J_URI, NEO4J_USER, NEO4J_PASSWORD)
+driver = Neo4jDriver()
 
 
 @bp.route("/ping", methods=["GET"])
@@ -33,8 +29,38 @@ def search_characters():
     return jsonify(results)
 
 
+@bp.route("/graph/init", methods=["POST"])
+def init_graph():
+    return jsonify(DEFAULT_GRAPH)
+
+
+@bp.route("/qa", methods=["POST"])
+def qa_route():
+    data = request.get_json()
+    query = data.get("query")
+    if not query:
+        return jsonify({"error": "Missing 'query'"}), 400
+
+    answer = f"模拟回答: {query}"
+    evidence = []
+    subgraph = {
+        "nodes": [{"id": "1", "name": "Alice"}, {"id": "2", "name": "Bob"}],
+        "links": [{"source": "1", "target": "2", "type": "friend"}],
+    }
+    focusNodeIds = ["1"]
+
+    return jsonify(
+        {
+            "answer": answer,
+            "evidence": evidence,
+            "subgraph": subgraph,
+            "focusNodeIds": focusNodeIds,
+        }
+    )
+
+
 @bp.route("/recommend", methods=["POST"])
-def recommend():
+def recommend_route():
     data = request.get_json()
     name = data.get("name")
     limit = data.get("limit", 5)
@@ -51,6 +77,15 @@ def recommend():
     """
 
     result = driver.run(query, name=name, limit=limit)
-    recommendations = [{"name": r["name"], "score": r["score"]} for r in result]
+    items = [{"name": r["name"], "score": r["score"]} for r in result]
 
-    return jsonify(recommendations)
+    subgraph = {
+        "nodes": [{"id": name, "name": name}]
+        + [{"id": r["name"], "name": r["name"]} for r in result],
+        "links": [
+            {"source": name, "target": r["name"], "type": "recommend"} for r in result
+        ],
+    }
+    focusNodeIds = [name]
+
+    return jsonify({"items": items, "subgraph": subgraph, "focusNodeIds": focusNodeIds})

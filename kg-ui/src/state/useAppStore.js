@@ -1,6 +1,6 @@
 // src/state/useAppStore.js
-
-import { useMemo, useState } from 'react'
+import { useMemo, useState, useEffect } from 'react'
+import { fetchGraph } from '../api/client'
 
 export const Modes = {
   QA: 'qa',
@@ -22,6 +22,43 @@ export function useAppStore() {
   // loading / error
   const [isLoading, setIsLoading] = useState(false)
   const [error, setError] = useState(null)
+
+  // 规范化图谱数据，保证每个节点都有 id/name/group/properties
+  function normalizeGraph(subgraph) {
+    const nodes = (subgraph.nodes || []).map(n => ({
+      id: String(n.id),
+      name: n.name ?? String(n.id),
+      group: n.group ?? 'entity',
+      properties: n.properties ?? {},
+      ...n
+    }))
+
+    const links = (subgraph.links || []).map(l => ({
+      source: typeof l.source === 'object' ? String(l.source.id) : String(l.source),
+      target: typeof l.target === 'object' ? String(l.target.id) : String(l.target),
+      type: l.type ?? 'rel',
+      ...l
+    }))
+
+    return { nodes, links }
+  }
+
+  useEffect(() => {
+    async function loadGraph() {
+      setIsLoading(true)
+      setError(null)
+      try {
+        const data = await fetchGraph(mode)
+        setGraph(normalizeGraph(data))
+      } catch (err) {
+        setError(err?.message || String(err))
+      } finally {
+        setIsLoading(false)
+      }
+    }
+
+    loadGraph()
+  }, [mode])
 
   const api = useMemo(() => ({
     mode, setMode,

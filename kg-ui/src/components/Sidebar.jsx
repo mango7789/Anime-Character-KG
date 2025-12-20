@@ -48,9 +48,9 @@ export default function Sidebar({ mode, setMode }) {
         </ul>
       </div> */}
 
-      <div style={{ marginTop: 'auto' }} className="small">
+      {/* <div style={{ marginTop: 'auto' }} className="small">
         UI 约定：后端返回 subgraph(nodes/links) + focusNodeIds，即可自动聚焦。
-      </div>
+      </div> */}
     </aside>
   )
 }

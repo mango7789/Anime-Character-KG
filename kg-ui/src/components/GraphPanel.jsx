@@ -33,6 +33,7 @@ function GraphPanel({ graph, store, focusNodeIds }) {
   const [dimensions, setDimensions] = useState({ width: 400, height: 700 });
   const [searchValue, setSearchValue] = useState("");
   const [originalGraph, setOriginalGraph] = useState(graph);
+  const [zoomLevel, setZoomLevel] = useState(1);
 
   const { setGraph, setFocusNodeIds } = store;
 
@@ -61,6 +62,7 @@ function GraphPanel({ graph, store, focusNodeIds }) {
       const center = getGraphCenter(graph);
       fg.centerAt(center.x, center.y, 0);
       fg.zoom(0.3, 0);
+      setZoomLevel(0.3);
     }
   }, [graph, originalGraph]);
 
@@ -321,12 +323,32 @@ function GraphPanel({ graph, store, focusNodeIds }) {
                   display: "inline-block",
                 }}
               />
-              <span>
+              <span style={{fontSize: 12}}>
                 {group} ({count})
               </span>
             </div>
           );
         })}
+      </div>
+
+      <div
+        style={{
+          marginTop: 38,
+          marginBottom: 4,
+          display: "flex",
+          flexWrap: "wrap",
+          position: "absolute",
+          top: 8,
+          right: 8,
+          background: "rgba(0,0,0,0.6)",
+          color: "#fff",
+          padding: "4px 8px",
+          borderRadius: 4,
+          fontSize: 12,
+          pointerEvents: "none",
+        }}
+      >
+        Zoom ×{zoomLevel.toFixed(2)}
       </div>
 
       {/* HTML Tooltip */}
@@ -406,6 +428,11 @@ function GraphPanel({ graph, store, focusNodeIds }) {
           ctx.fill();
         }}
         nodeLabel={null}
+        onZoomEnd={() => {
+          if (fgRef.current) {
+            setZoomLevel(fgRef.current.zoom());
+          }
+        }}
       />
     </div>
   );

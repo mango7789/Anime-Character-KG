@@ -8,6 +8,11 @@ export const Modes = {
   REC: "rec",
 };
 
+export const GraphViewModes = {
+  FULL: "full",
+  FOCUS: "focus",
+};
+
 export function useAppStore() {
   const [mode, setMode] = useState(Modes.QUERY);
 
@@ -23,6 +28,8 @@ export function useAppStore() {
   // loading / error
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState(null);
+  const [graphViewMode, setGraphViewMode] = useState(GraphViewModes.FOCUS);
+
 
   // 规范化图谱数据，保证每个节点都有 id/name/group/properties
   function normalizeGraph(subgraph) {
@@ -77,8 +84,10 @@ export function useAppStore() {
       setIsLoading,
       error,
       setError,
+      graphViewMode,
+      setGraphViewMode,
     }),
-    [mode, graph, result, focusNodeIds, isLoading, error]
+    [mode, graph, result, focusNodeIds, isLoading, error, graphViewMode]
   );
 
   return api;

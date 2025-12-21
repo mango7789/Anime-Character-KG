@@ -2,12 +2,18 @@
 import React from "react";
 import { Modes } from "../state/useAppStore";
 import { MODE_BG, MODE_COLORS } from "./Constant";
+import characterImg from "../assets/skele.jpeg";
 
 export default function Sidebar({ mode, setMode }) {
   return (
     <aside className="sidebar">
       <div className="brand">
-        <div className="brand-badge" />
+        <img
+          src={characterImg}
+          alt="角色图标"
+          className="brand-badge"
+          style={{ width: 40, height: 40, borderRadius: "50%" }}
+        />
         <div>
           <div className="brand-title">Anime Character KG</div>
           <div className="brand-sub">基于热门动画角色的知识图谱系统</div>

@@ -31,6 +31,13 @@ def search_characters():
 
 @bp.route("/graph/init", methods=["POST"])
 def init_graph():
+    data = request.get_json() or {}
+    view_mode = data.get("viewMode", "focus")
+
+    if view_mode == "full":
+        append_cypher = ""
+    else:
+        append_cypher = "LIMIT $top_n"
     nodes = []
     links = []
     TOP_N = 1000
@@ -44,8 +51,8 @@ def init_graph():
             WITH n, degree, labels(n)[0] AS label
             RETURN id(n) AS id, n.name AS name, label AS label, properties(n) AS props
             ORDER BY degree DESC
-            LIMIT $top_n
-            """,
+            """
+            + append_cypher,
             top_n=TOP_N,
         )
 
@@ -111,7 +118,10 @@ def query_path():
     entityB = data.get("entityB")
 
     if not entityA or not entityB:
-        return jsonify({"error": "entityA 和 entityB 必须提供"}), 400
+        return jsonify({"error": "实体 A 和实体 B 必须提供"}), 400
+
+    if entityA == entityB:
+        return jsonify({"error": "实体 A 和实体 B 不能相同"}), 400
 
     nodes = []
     links = []

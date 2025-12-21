@@ -37,6 +37,6 @@ export async function queryPath({ entityA, entityB }) {
   return postApi("query-path", { entityA, entityB });
 }
 
-export async function fetchGraph() {
-  return postApi("graph/init", {});
+export async function fetchGraph(mode) {
+  return postApi("graph/init", { mode });
 }

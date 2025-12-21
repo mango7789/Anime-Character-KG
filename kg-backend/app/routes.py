@@ -207,13 +207,17 @@ def qa_route():
     if not query:
         return jsonify({"error": "Missing 'query'"}), 400
 
+    # TODO: ner 识别
+    # TODO: 构造 cypher 查询
+    # TODO: 输入 LLM 生成回复
+
     answer = f"模拟回答: {query}"
     evidence = []
     subgraph = {
         "nodes": [{"id": "1", "name": "Alice"}, {"id": "2", "name": "Bob"}],
         "links": [{"source": "1", "target": "2", "type": "friend"}],
     }
-    focusNodeIds = ["1"]
+    focusNodeIds = ["1", "2"]
 
     return jsonify(
         {
@@ -232,7 +236,7 @@ def recommend_route():
     limit = data.get("limit", 5)
 
     if not name:
-        return jsonify({"error": "Missing 'name' parameter"}), 400
+        return jsonify({"error": "缺少实体"}), 400
 
     query = """
         MATCH (c:Character {name:$name})-[:FRIEND_OF]->(f)-[:FRIEND_OF]->(rec)

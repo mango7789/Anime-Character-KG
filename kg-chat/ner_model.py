@@ -8,10 +8,12 @@ from sklearn.metrics.pairwise import cosine_similarity
 # 1. 规则实体匹配（Aho-Corasick）
 # ===============================
 
+
 class RuleNER:
     """
     只负责识别【可指称实体节点】
     """
+
     def __init__(self, ent_dir="data/ent_aug"):
         # ✅ 只保留 entity_types
         self.entity_types = [
@@ -65,12 +67,14 @@ class RuleNER:
 # 2. TF-IDF 实体规范化
 # ===============================
 
+
 class TFIDFAligner:
     """
     用于：
     - 处理别名
     - 模糊匹配
     """
+
     def __init__(self, ent_dir="data/ent_aug"):
         self.type2ents = {}
         self.type2vecs = {}
@@ -115,9 +119,7 @@ class TFIDFAligner:
             idx = sims.argmax()
 
             if sims[idx] >= threshold:
-                result.setdefault(ent_type, []).append(
-                    self.type2ents[ent_type][idx]
-                )
+                result.setdefault(ent_type, []).append(self.type2ents[ent_type][idx])
 
         return result
 
@@ -125,6 +127,7 @@ class TFIDFAligner:
 # ===============================
 # 3. 对外统一接口
 # ===============================
+
 
 def get_ner_result(model, tokenizer, text, rule_ner, tfidf_aligner, device, idx2tag):
     """

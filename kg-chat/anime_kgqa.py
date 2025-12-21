@@ -6,27 +6,30 @@ from openai import OpenAI
 from transformers import BertTokenizer
 from py2neo import Graph
 
-import ner_model as zwk   # 你已有的 ner_model.py
+import ner_model as zwk
 
 client = OpenAI(
     api_key="sk-tahcowcdmrkhavgytieftbuiwyejajagthkkesunkygznxvo",
-    base_url="https://api.siliconflow.cn/v1"
-) 
+    base_url="https://api.siliconflow.cn/v1",
+)
 
 
 def call_llm(system_prompt, user_prompt, temperature=0.3):
     response = client.chat.completions.create(
-        model="Qwen/Qwen2.5-7B-Instruct",  # ← 硅基流动模型名
+        model="Qwen/Qwen2.5-7B-Instruct",
         messages=[
             {"role": "system", "content": system_prompt},
-            {"role": "user", "content": user_prompt}
+            {"role": "user", "content": user_prompt},
         ],
-        temperature=temperature
+        temperature=temperature,
     )
     return response.choices[0].message.content.strip()
+
+
 # ===============================
 # 1. 加载模型 & 资源
 # ===============================
+
 
 def load_resources():
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
@@ -36,11 +39,7 @@ def load_resources():
     tfidf_aligner = zwk.TFIDFAligner(ent_dir="data/ent_aug")
 
     # ===== Neo4j =====
-    graph = Graph(
-        "http://localhost:7474",
-        user="neo4j",
-        password="your_password"
-    )
+    graph = Graph("http://localhost:7474", user="neo4j", password="your_password")
 
     # ⚠️ 这些返回 None 只是为了兼容旧接口
     ner_model = None
@@ -50,10 +49,10 @@ def load_resources():
     return ner_model, tokenizer, rule_ner, tfidf_aligner, idx2tag, device, graph
 
 
-
 # ===============================
 # 2. 意图识别（动漫版）
 # ===============================
+
 
 def Intent_Recognition(query):
     system_prompt = f"""
@@ -174,19 +173,13 @@ def Intent_Recognition(query):
 "{query}"
 """
 
-    return call_llm(
-        system_prompt=system_prompt,
-        user_prompt=user_prompt,
-        temperature=0
-    )
+    return call_llm(system_prompt=system_prompt, user_prompt=user_prompt, temperature=0)
 
 
-
-
-'''
 # ===============================
 # 3. KG 查询 + Prompt 构造
 # ===============================
+
 
 def build_prompt(intent_result, query, entities, graph):
     prompt = "<指令>你是一个动漫角色知识问答助手，必须完全基于提示回答。</指令>"
@@ -269,17 +262,17 @@ def build_prompt(intent_result, query, entities, graph):
             prompt += "</提示>"
             used = True
 
-
     if not used:
         prompt += "<提示>知识库中没有可用信息。</提示>"
 
     prompt += f"<用户问题>{query}</用户问题>"
     return prompt
 
-'''
+
 # ===============================
 # 4. 主流程
 # ===============================
+
 
 def main():
     ner_model, tokenizer, rule, tfidf_r, idx2tag, device, graph = load_resources()
@@ -294,13 +287,7 @@ def main():
 
         # ① 实体识别
         entities = zwk.get_ner_result(
-            ner_model,
-            tokenizer,
-            query,
-            rule,
-            tfidf_r,
-            device,
-            idx2tag
+            ner_model, tokenizer, query, rule, tfidf_r, device, idx2tag
         )
         print(f"[NER] {entities}")
 
@@ -315,9 +302,8 @@ def main():
         answer = call_llm(
             system_prompt="你是一个动漫角色知识问答助手，必须严格基于给定提示回答。",
             user_prompt=prompt,
-            temperature=0.3
+            temperature=0.3,
         )
-
 
         print(f"\n助手：{answer}")
 

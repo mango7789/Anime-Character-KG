@@ -3,8 +3,8 @@ import os
 from collections import defaultdict
 
 
-JSON_PATH = r"C:\Users\19642\Desktop\kg\total.json"        # 你的完整 JSON 文件
-OUT_DIR = r"C:\Users\19642\Desktop\kg\ent_aug"             # 输出目录
+JSON_PATH = r"C:\Users\19642\Desktop\kg\total.json"  # 你的完整 JSON 文件
+OUT_DIR = r"C:\Users\19642\Desktop\kg\ent_aug"  # 输出目录
 
 
 def main():

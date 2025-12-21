@@ -16,7 +16,7 @@ export default function Sidebar({ mode, setMode }) {
         />
         <div>
           <div className="brand-title">Anime Character KG</div>
-          <div className="brand-sub">基于热门动画角色的知识图谱系统</div>
+          <div className="brand-sub" style={{fontSize: 11}}>基于热门动画角色的知识图谱系统</div>
         </div>
       </div>
 

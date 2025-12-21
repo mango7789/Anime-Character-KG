@@ -37,3 +37,8 @@ conda activate Anime
 cd kg-backend
 python run.py
 ```
+
+### 问答
+cd kg-chat
+python anime_kgqa.py
+会对用户输入的prompt进行实体识别和意图识别，把识别出的字段按照规则在知识图谱中搜索，最后给大模型组织语言

@@ -1,3 +1,19 @@
+ATTRIBUTE_RELATIONS = {
+    "Time",
+    "Literal",
+    "Numeric",
+    "Tag",
+}
+
+RELATION_RELATIONS = {
+    "Work",
+    "Character",
+    "Person",
+    "Organization",
+    "Group",
+    "Location",
+}
+
 DEFAULT_GRAPH = {
     "nodes": [
         {

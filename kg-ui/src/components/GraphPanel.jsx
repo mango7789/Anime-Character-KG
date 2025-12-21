@@ -7,6 +7,7 @@ import React, {
   useMemo,
 } from "react";
 import ForceGraph2D from "react-force-graph-2d";
+import { MODE_BG, MODE_COLORS } from "./Constant";
 
 // 可选调色板
 const COLOR_PALETTE = [
@@ -29,11 +30,11 @@ function GraphPanel({ graph, store, focusNodeIds }) {
   const [hoverNode, setHoverNode] = useState(null);
   const [hoverPos, setHoverPos] = useState({ x: 0, y: 0 });
   const [selectedNode, setSelectedNode] = useState(null);
-  const [dimensions, setDimensions] = useState({ width: 400, height: 600 });
+  const [dimensions, setDimensions] = useState({ width: 400, height: 700 });
   const [searchValue, setSearchValue] = useState("");
   const [originalGraph, setOriginalGraph] = useState(graph);
 
-  const { setGraph } = store;
+  const { setGraph, setFocusNodeIds } = store;
 
   // 根据 graph.nodes 自动生成 group -> color 映射
   const groupColorMap = useMemo(() => {
@@ -51,6 +52,15 @@ function GraphPanel({ graph, store, focusNodeIds }) {
   useEffect(() => {
     if (!originalGraph || originalGraph.nodes.length === 0) {
       setOriginalGraph(graph);
+    }
+
+    setSelectedNode(null);
+
+    const fg = fgRef.current;
+    if (fg && graph.nodes.length > 0) {
+      const center = getGraphCenter(graph);
+      fg.centerAt(center.x, center.y, 0);
+      fg.zoom(0.3, 0);
     }
   }, [graph, originalGraph]);
 
@@ -80,18 +90,19 @@ function GraphPanel({ graph, store, focusNodeIds }) {
   };
 
   // 重置视图
-const resetGraphView = () => {
-  const fg = fgRef.current;
-  if (!fg || !originalGraph) return;
+  const resetGraphView = () => {
+    const fg = fgRef.current;
+    if (!fg || !originalGraph) return;
 
-  setGraph(originalGraph);
-  setSelectedNode(null);
-  setSearchValue("");
+    setGraph(originalGraph);
+    setSelectedNode(null);
+    setFocusNodeIds([]);
+    setSearchValue("");
 
-  const center = getGraphCenter(originalGraph);
-  fg.centerAt(center.x, center.y, 500);
-  fg.zoom(2, 500);
-};
+    const center = getGraphCenter(originalGraph);
+    fg.centerAt(center.x, center.y, 500);
+    fg.zoom(0.3, 500);
+  };
 
   const handleSearchEnter = (e) => {
     if (e.key === "Enter" && searchValue.trim() !== "") {
@@ -110,34 +121,36 @@ const resetGraphView = () => {
   // 绘制节点
   const paintNode = (node, ctx, globalScale) => {
     const r = 5;
-
     ctx.beginPath();
     ctx.arc(node.x, node.y, r, 0, 2 * Math.PI);
 
-    // 使用 groupColorMap 映射
-    let fillColor = groupColorMap[node.group || "default"] || "#888";
+    const fillColor = groupColorMap[node.group || "default"] || "#888";
 
-    if (selectedNode && node !== selectedNode) {
-      // 其他节点透明度降低
-      const hex = fillColor.replace("#", "");
-      fillColor = `#${hex}66`;
-    }
-    // 选中节点保持原来的颜色，不改变
-    ctx.fillStyle = fillColor;
+    // 判断是否高亮
+    const hasFocus = focusNodeIds?.length > 0 || selectedNode;
+    const isFocused =
+      !hasFocus || // 如果没有焦点节点，全部高亮
+      (selectedNode && node.id === selectedNode.id) ||
+      (focusNodeIds && focusNodeIds.includes(String(node.id)));
+
+    // 设置填充颜色
+    ctx.fillStyle = isFocused ? fillColor : `${fillColor}66`;
     ctx.fill();
 
     // 绘制 label
     const label = node.name || node.id;
     const fontSize = Math.max(8, 10 / globalScale);
     ctx.font = `${fontSize}px sans-serif`;
-    let showLabel = true;
-    if (selectedNode && node !== selectedNode) {
+
+    let showLabel = isFocused;
+
+    if (!showLabel && selectedNode) {
       const isNeighbor = graph.links.some(
         (l) =>
           (l.source.id === selectedNode.id && l.target.id === node.id) ||
           (l.target.id === selectedNode.id && l.source.id === node.id)
       );
-      if (!isNeighbor) showLabel = false;
+      showLabel = isNeighbor;
     }
 
     if (showLabel) {
@@ -171,9 +184,42 @@ const resetGraphView = () => {
     >
       <div
         className="panel-header"
-        style={{ display: "flex", alignItems: "center", gap: 8 }}
+        style={{
+          display: "flex",
+          alignItems: "center",
+          gap: 8,
+          backgroundColor: MODE_BG[store.mode] || "#222",
+          // borderLeft: `4px solid ${MODE_COLORS[store.mode] || "#888"}`,
+          padding: "4px 8px",
+          borderRadius: "4px",
+        }}
       >
-        <div className="title">图谱子图（可拖动 / 缩放）</div>
+        <div className="title" style={{ color: "#fff", fontWeight: 600 }}>
+          节点数量：{graph.nodes.length}，边数量：{graph.links.length}
+        </div>
+
+        {/* 下载按钮 */}
+        <button
+          className="icon-btn"
+          onClick={() => {
+            const dataStr =
+              "data:text/json;charset=utf-8," +
+              encodeURIComponent(JSON.stringify(graph, null, 2));
+            const dlAnchor = document.createElement("a");
+            dlAnchor.setAttribute("href", dataStr);
+            dlAnchor.setAttribute("download", "graph.json");
+            dlAnchor.click();
+          }}
+          style={{
+            marginLeft: 8,
+            borderRadius: 4,
+            height: 32,
+            padding: "0 12px",
+            fontSize: 14,
+          }}
+        >
+          下载图谱
+        </button>
 
         {/* 搜索 + Reset 包裹 */}
         <div style={{ display: "flex", alignItems: "center", height: 32 }}>
@@ -182,12 +228,12 @@ const resetGraphView = () => {
             className="icon-btn"
             onClick={() => {
               resetGraphView();
-              setSearchValue(""); // 点击 Reset 清空搜索框
+              setSearchValue("");
             }}
             style={{
               margin: 0,
               borderRadius: "4px 0 0 4px",
-              height: "100%", // 与搜索框高度一致
+              height: "100%",
               padding: "0 12px",
               fontSize: 14,
             }}
@@ -236,7 +282,11 @@ const resetGraphView = () => {
 
           <datalist id="nodes-list">
             {graph.nodes.map((n) => (
-              <option key={n.id} value={n.name} />
+              <option
+                key={n.id}
+                value={n.name}
+                label={`(${n.group || "default"})`}
+              />
             ))}
           </datalist>
         </div>
@@ -245,7 +295,7 @@ const resetGraphView = () => {
       {/* Legend */}
       <div
         style={{
-          marginTop: 4,
+          marginTop: 8,
           marginBottom: 4,
           display: "flex",
           flexWrap: "wrap",
@@ -254,22 +304,29 @@ const resetGraphView = () => {
           paddingRight: 8,
         }}
       >
-        {Object.entries(groupColorMap).map(([group, color]) => (
-          <div
-            key={group}
-            style={{ display: "flex", alignItems: "center", gap: 4 }}
-          >
-            <span
-              style={{
-                width: 12,
-                height: 12,
-                backgroundColor: color,
-                display: "inline-block",
-              }}
-            />
-            <span>{group}</span>
-          </div>
-        ))}
+        {Object.entries(groupColorMap).map(([group, color]) => {
+          const count = graph.nodes.filter(
+            (n) => (n.group || "default") === group
+          ).length;
+          return (
+            <div
+              key={group}
+              style={{ display: "flex", alignItems: "center", gap: 4 }}
+            >
+              <span
+                style={{
+                  width: 12,
+                  height: 12,
+                  backgroundColor: color,
+                  display: "inline-block",
+                }}
+              />
+              <span>
+                {group} ({count})
+              </span>
+            </div>
+          );
+        })}
       </div>
 
       {/* HTML Tooltip */}

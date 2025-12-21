@@ -1,6 +1,5 @@
 // src/api/client.js
-
-const BASE_URL = "http://10.176.40.144:5000/api";
+import { BASE_URL } from "../components/Constant";
 
 async function postApi(endpoint, body) {
   const res = await fetch(`${BASE_URL}/${endpoint}`, {
@@ -8,8 +7,19 @@ async function postApi(endpoint, body) {
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(body),
   });
-  if (!res.ok) throw new Error(`HTTP ${res.status}`);
-  return res.json();
+
+  let data;
+  try {
+    data = await res.json();
+  } catch {
+    data = null;
+  }
+
+  if (!res.ok) {
+    throw new Error(data?.error || `HTTP ${res.status}`);
+  }
+
+  return data;
 }
 
 // 期望返回 { answer, evidence, subgraph, focusNodeIds }
@@ -21,6 +31,10 @@ export async function qa(query) {
 // 期望返回 { items, subgraph, focusNodeIds }
 export async function recommend({ query, userId, topK = 5, filters } = {}) {
   return postApi("recommend", { query, userId, topK: Number(topK), filters });
+}
+
+export async function queryPath({ entityA, entityB }) {
+  return postApi("query-path", { entityA, entityB });
 }
 
 export async function fetchGraph() {

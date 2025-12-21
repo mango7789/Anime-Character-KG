@@ -22,7 +22,7 @@ export default function App() {
       <Sidebar mode={store.mode} setMode={store.setMode} />
 
       <div className="main">
-        <TopBar mode={store.mode} />
+        {/* <TopBar mode={store.mode} /> */}
 
         {/* <div className="content"> */}
           <div className="card">

@@ -39,7 +39,7 @@ def load_resources():
     tfidf_aligner = zwk.TFIDFAligner(ent_dir="data/ent_aug")
 
     # ===== Neo4j =====
-    graph = Graph("http://localhost:7474", user="neo4j", password="your_password")
+    graph = Graph("http://localhost:7474", user="neo4j", password="anime123")
 
     # ⚠️ 这些返回 None 只是为了兼容旧接口
     ner_model = None

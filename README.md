@@ -1,5 +1,14 @@
 ## Anime Characters Knowledge Graph
 
+### 数据爬取与知识抽取
+```
+cd kg-extract
+## 抽取动画信息
+python moegirl_anime.py
+## 抽取角色信息（按动画归类）
+python moegirl_anime_character.py
+```
+
 
 ### 前端
 

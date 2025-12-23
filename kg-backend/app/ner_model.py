@@ -13,7 +13,7 @@ class RuleNER:
     """
     只负责识别【可指称实体节点】
     """
-
+    '''
     def __init__(self, ent_dir="data/ent_aug"):
         # ✅ 只保留 entity_types
         self.entity_types = [
@@ -41,12 +41,52 @@ class RuleNER:
 
         for a in self.automata:
             a.make_automaton()
+        
+    '''
 
+
+
+    def __init__(self, ent_dir="data/ent_aug", min_len=2):
+        self.entity_types = [
+            "Work",
+            "Character",
+            "Person",
+            "Organization",
+            "Group",
+            "Location",
+        ]
+
+        self.type2idx = {t: i for i, t in enumerate(self.entity_types)}
+        self.automata = [ahocorasick.Automaton() for _ in self.entity_types]
+
+        for ent_type in self.entity_types:
+            path = os.path.join(ent_dir, f"{ent_type}.txt")
+            if not os.path.exists(path):
+                continue
+
+            with open(path, encoding="utf-8") as f:
+                for line in f:
+                    ent = line.strip()
+                    if not ent:
+                        continue
+
+                    # ⭐ 1. 加完整实体
+                    self.automata[self.type2idx[ent_type]].add_word(ent, ent)
+
+                    # ⭐ 2. 加「尾部关键子串」（如：路飞）
+                    if len(ent) >= 3:
+                        key = ent.split("·")[-1]  # 蒙奇·D·路飞 → 路飞
+                        if len(key) >= min_len:
+                            self.automata[self.type2idx[ent_type]].add_word(
+                                key, ent
+                            )
+
+        for a in self.automata:
+            a.make_automaton()
+
+    '''
     def find(self, text):
-        """
-        返回：
-        [(start, end, entity_type, entity_name), ...]
-        """
+
         results = []
         used = set()
 
@@ -61,6 +101,30 @@ class RuleNER:
                     used.add(i)
 
         return results
+    '''
+
+    def find(self, text):
+        """
+        返回：
+        [(start, end, entity_type, canonical_entity), ...]
+        """
+        results = []
+        used = set()
+
+        for idx, automaton in enumerate(self.automata):
+            etype = self.entity_types[idx]
+            for end, canonical in automaton.iter(text):
+                start = end - len(canonical.split("·")[-1]) + 1
+
+                if any(i in used for i in range(start, end + 1)):
+                    continue
+
+                results.append((start, end, etype, canonical))
+                for i in range(start, end + 1):
+                    used.add(i)
+
+        return results
+
 
 
 # ===============================

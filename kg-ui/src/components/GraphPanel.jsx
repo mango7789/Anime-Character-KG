@@ -399,8 +399,9 @@ function GraphPanel({ graph, store, focusNodeIds }) {
         graphData={graph}
         enableNodeDrag
         cooldownTime={1000}
-        linkWidth={2}
+        linkWidth={(link) => (link.is_shortest ? 3 : 2)}
         linkColor={(link) => {
+          if (link.is_shortest) return "red";
           if (!selectedNode) return "rgba(255,255,255,0.6)";
           if (
             link.source.id === selectedNode.id ||

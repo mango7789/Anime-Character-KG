@@ -419,8 +419,11 @@ def qa_route():
         )
 
     # 选实体：多实体取前2个，单实体取第1个
+    #ent_a = focus_entities[0]
+    #ent_b = focus_entities[1] if (multi_entity and len(focus_entities) >= 2) else None
     ent_a = focus_entities[0]
-    ent_b = focus_entities[1] if (multi_entity and len(focus_entities) >= 2) else None
+    ent_b = focus_entities[1] if len(focus_entities) >= 2 else None
+
 
     # 对关系做个兜底：如果 LLM 没给 relation，就尝试从 query 中猜一个
     # （你也可以删除这段，仅依赖 LLM）

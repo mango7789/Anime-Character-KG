@@ -61,7 +61,7 @@ export default function InteractionPanel({ mode, store }) {
           entityA: entityA.trim(),
           entityB: entityB.trim(),
         });
-        setResult({ path: data.path || [] });
+        setResult({ path: data.path || [], shortest: data.shortest || null });
       }
 
       // 更新子图和焦点节点

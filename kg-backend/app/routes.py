@@ -139,62 +139,72 @@ def query_path():
 
         idA, idB = record["idA"], record["idB"]
 
-        # Memgraph 不支持 shortestPath(), 改用固定长度路径匹配
-        result = session.run(
+        # 获取最短路径
+        result_shortest = session.run(
             """
-            MATCH p = (a)-[r*..5]-(b)
+            MATCH p = allShortestPaths((a)-[*..5]-(b))
             WHERE id(a) = $idA AND id(b) = $idB
-            UNWIND nodes(p) AS n
-            UNWIND relationships(p) AS rel
-            RETURN collect(DISTINCT n) AS path_nodes, collect(DISTINCT rel) AS path_rels
+            RETURN nodes(p) AS shortest_nodes, relationships(p) AS shortest_rels, length(p) AS shortest_length
             """,
             idA=idA,
             idB=idB,
         )
 
-        record = result.single()
-        path_nodes = record["path_nodes"] if record else []
-        path_rels = record["path_rels"] if record else []
+        record_shortest = result_shortest.single()
+        shortest_nodes_seq = (
+            record_shortest["shortest_nodes"] if record_shortest else []
+        )
+        shortest_rels_seq = record_shortest["shortest_rels"] if record_shortest else []
+        shortest_length = record_shortest["shortest_length"] if record_shortest else 0
 
-        node_ids = set()
-        for n in path_nodes:
+        # 把所有最短路径的节点和关系加入图，同时标记 is_shortest
+        node_map = {}
+        link_map = {}
+
+        for n in shortest_nodes_seq:
             nid = n.id
-            if nid in node_ids:
-                continue
-            node_ids.add(nid)
-            props = {k: v for k, v in n.items() if k != "name"}
-            nodes.append(
-                {
+            if nid not in node_map:
+                props = {k: v for k, v in n.items() if k != "name"}
+                node_map[nid] = {
                     "id": nid,
                     "name": n.get("name"),
                     "group": next(iter(n.labels), "default"),
                     "properties": props,
                 }
-            )
 
-        for r in path_rels:
+        for r in shortest_rels_seq:
+            rid = r.id
             rel_type = r.type
             source_id = r.start_node.id
             target_id = r.end_node.id
             rel_props = dict(r.items())
             if rel_type in ATTRIBUTE_RELATIONS:
-                for node in nodes:
-                    if node["id"] == source_id:
-                        node["properties"][rel_type] = rel_props.get("value", target_id)
+                if source_id in node_map:
+                    node_map[source_id]["properties"][rel_type] = rel_props.get(
+                        "value", target_id
+                    )
             else:
-                links.append(
-                    {
-                        "source": source_id,
-                        "target": target_id,
-                        "type": rel_type,
-                        "properties": rel_props,
-                    }
-                )
+                link_map[rid] = {
+                    "source": source_id,
+                    "target": target_id,
+                    "type": rel_type,
+                    "properties": rel_props,
+                    "is_shortest": True,
+                }
+
+        nodes = list(node_map.values())
+        links = list(link_map.values())
 
     return jsonify(
         {
             "path": {"nodes": nodes, "links": links},
             "subgraph": {"nodes": nodes, "links": links},
+            "shortest": {
+                "length": shortest_length,
+                "node_ids": [n.id for n in shortest_nodes_seq],
+                "node_names": [n.get("name") for n in shortest_nodes_seq],
+                "rel_ids": [r.id for r in shortest_rels_seq],
+            },
             "focusNodeIds": [str(idA), str(idB)],
         }
     )

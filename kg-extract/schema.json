@@ -1,0 +1,659 @@
+{
+    "entity_types": {
+        "Work": {
+            "description": "Creative works such as animation, manga, novels, and games",
+            "examples": [
+                "A Song of Ice and Fire",
+                "Jujutsu Kaisen"
+            ]
+        },
+        "Character": {
+            "description": "Fictional characters appearing in works",
+            "examples": [
+                "Eren Yeager",
+                "Rem"
+            ]
+        },
+        "Person": {
+            "description": "Real-world individuals such as authors, voice actors, and directors",
+            "examples": [
+                "Hajime Isayama",
+                "Natsuki Hanae"
+            ]
+        },
+        "Organization": {
+            "description": "Real-world organizations such as production companies and committees",
+            "examples": [
+                "WIT STUDIO",
+                "MAPPA"
+            ]
+        },
+        "Group": {
+            "description": "In-universe organizations or groups that characters belong to",
+            "examples": [
+                "Survey Corps",
+                "Class 1-A",
+                "Akatsuki"
+            ]
+        },
+        "Location": {
+            "description": "In-universe locations appearing in fictional works",
+            "examples": [
+                "Underground City",
+                "Shiganshina District"
+            ]
+        }
+    },
+    "attribute_types": {
+        "Time": {
+            "description": "Time point or time span",
+            "examples": [
+                "2013-04-06",
+                "December 25"
+            ]
+        },
+        "Literal": {
+            "description": "Plain text values",
+            "examples": [
+                "Male",
+                "Alive"
+            ]
+        },
+        "Numeric": {
+            "description": "Numeric values or numeric ranges",
+            "examples": [
+                "160",
+                "34-38"
+            ]
+        },
+        "Tag": {
+            "description": "Descriptive tags for characters or works",
+            "examples": [
+                "Tsundere",
+                "Sharp-tongued",
+                "Clean Freak"
+            ]
+        }
+    },
+    "relations": {
+        "Work": {
+            "OriginalAuthor": {
+                "range": [
+                    "Person"
+                ],
+                "description": "The original author of the work"
+            },
+            "ChiefDirector": {
+                "range": [
+                    "Person"
+                ],
+                "description": "The chief director or series director (commonly used in Japanese animation)"
+            },
+            "SeriesComposition": {
+                "range": [
+                    "Person"
+                ],
+                "description": "Responsible for overall story structure and script composition"
+            },
+            "CharacterDesigner": {
+                "range": [
+                    "Person"
+                ],
+                "description": "Responsible for character visual design"
+            },
+            "Music": {
+                "range": [
+                    "Person",
+                    "Organization"
+                ],
+                "description": "Music composition or music production"
+            },
+            "ProductionCompany": {
+                "range": [
+                    "Organization"
+                ],
+                "description": "The animation or film production company"
+            },
+            "Publisher": {
+                "range": [
+                    "Organization"
+                ],
+                "description": "The publisher or production committee of the work"
+            },
+            "PublicationPeriod": {
+                "range": [
+                    "Time"
+                ],
+                "description": "The time span during which the work was published or serialized"
+            },
+            "FirstAiringDate": {
+                "range": [
+                    "Time"
+                ],
+                "description": "The date when the work was first aired or released"
+            },
+            "WorkCategory": {
+                "range": [
+                    "Tag"
+                ],
+                "description": "Tags of the work (e.g. 黑暗題材、战斗题材)"
+            }
+        },
+        "Character": {
+            "AppearsIn": {
+                "range": [
+                    "Work"
+                ],
+                "description": "The work in which the character primarily appears"
+            },
+            "VoiceBy": {
+                "range": [
+                    "Person"
+                ],
+                "description": "The voice actor who voices the character"
+            },
+            "Alias": {
+                "range": [
+                    "Literal"
+                ],
+                "description": "Alternative names, nicknames, or titles of the character"
+            },
+            "BirthDate": {
+                "range": [
+                    "Time"
+                ],
+                "description": "The character's date or time of birth"
+            },
+            "Gender": {
+                "range": [
+                    "Literal"
+                ],
+                "description": "The gender of the character"
+            },
+            "Height": {
+                "range": [
+                    "Numeric"
+                ],
+                "description": "The character's height"
+            },
+            "Weight": {
+                "range": [
+                    "Numeric"
+                ],
+                "description": "The character's weight"
+            },
+            "EyeColor": {
+                "range": [
+                    "Literal"
+                ],
+                "description": "The character's eye color"
+            },
+            "HairColor": {
+                "range": [
+                    "Literal"
+                ],
+                "description": "The character's hair color"
+            },
+            "LivingStatus": {
+                "range": [
+                    "Literal"
+                ],
+                "description": "The character's living or survival status in the story"
+            },
+            "MemberOf": {
+                "range": [
+                    "Group"
+                ],
+                "description": "Group, factions or organization the character belongs to"
+            },
+            "HasPosition": {
+                "range": [
+                    "Literal"
+                ],
+                "description": "Job or position the character has in the group"
+            },
+            "Origin": {
+                "range": [
+                    "Location"
+                ],
+                "description": "Place where the character originates"
+            },
+            "ActiveArea": {
+                "range": [
+                    "Location"
+                ],
+                "description": "Main area where the character is active"
+            },
+            "CharacterTag": {
+                "range": [
+                    "Tag"
+                ],
+                "description": "Personality traits, attributes, or tags associated with the character"
+            }
+        },
+        "Between_Character": {
+            "HasParent": {
+                "example": [
+                    "父母",
+                    "双亲"
+                ],
+                "description": "Parent-child relationship"
+            },
+            "HasFather": {
+                "example": [
+                    "父亲",
+                    "父",
+                    "爸爸",
+                    "爹",
+                    "生父"
+                ],
+                "description": "Father of the character"
+            },
+            "HasMother": {
+                "example": [
+                    "母亲",
+                    "母",
+                    "妈妈",
+                    "娘",
+                    "生母"
+                ],
+                "description": "Mother of the character"
+            },
+            "HasSon": {
+                "example": [
+                    "儿子"
+                ],
+                "description": "Son of the character"
+            },
+            "HasDaughter": {
+                "example": [
+                    "女儿"
+                ],
+                "description": "Daughter of the character"
+            },
+            "HasChild": {
+                "example": [
+                    "子女",
+                    "孩子"
+                ],
+                "description": "Child of the character"
+            },
+            "HasAdoptiveParent": {
+                "example": [
+                    "养父母"
+                ],
+                "description": "Adoptive parent relationship"
+            },
+            "HasAdoptiveFather": {
+                "example": [
+                    "养父"
+                ],
+                "description": "Adoptive father"
+            },
+            "HasAdoptiveMother": {
+                "example": [
+                    "养母"
+                ],
+                "description": "Adoptive mother"
+            },
+            "HasAdoptiveSon": {
+                "example": [
+                    "养子"
+                ],
+                "description": "Adoptive son"
+            },
+            "HasAdoptiveDaughter": {
+                "example": [
+                    "养女"
+                ],
+                "description": "Adoptive daughter"
+            },
+            "HasGrandParent": {
+                "example": [
+                    "祖父母",
+                    "公婆"
+                ],
+                "description": "Grandparent relationship"
+            },
+            "HasGrandFather": {
+                "example": [
+                    "祖父",
+                    "爷爷",
+                    "外公",
+                    "爷"
+                ],
+                "description": "Grandfather"
+            },
+            "HasGrandMother": {
+                "example": [
+                    "祖母",
+                    "奶奶",
+                    "外婆",
+                    "奶"
+                ],
+                "description": "Grandmother"
+            },
+            "HasAncestor": {
+                "example": [
+                    "祖先"
+                ],
+                "description": "Ancestor of the character"
+            },
+            "HasDescendant": {
+                "example": [
+                    "后代"
+                ],
+                "description": "Descendant of the character"
+            },
+            "HasOlderBrother": {
+                "example": [
+                    "哥哥",
+                    "兄长",
+                    "大哥",
+                    "兄"
+                ],
+                "description": "Older brother"
+            },
+            "HasYoungerBrother": {
+                "example": [
+                    "弟弟",
+                    "弟"
+                ],
+                "description": "Younger brother"
+            },
+            "HasOlderSister": {
+                "example": [
+                    "姐姐",
+                    "姊姊",
+                    "姊",
+                    "姐"
+                ],
+                "description": "Older sister"
+            },
+            "HasYoungerSister": {
+                "example": [
+                    "妹妹",
+                    "妹"
+                ],
+                "description": "Younger sister"
+            },
+            "HasUncle": {
+                "example": [
+                    "叔叔",
+                    "伯父",
+                    "舅舅",
+                    "舅子"
+                ],
+                "description": "Uncle"
+            },
+            "HasAunt": {
+                "example": [
+                    "阿姨",
+                    "姑姑",
+                    "舅妈"
+                ],
+                "description": "Aunt"
+            },
+            "HasCousin": {
+                "example": [
+                    "堂兄",
+                    "堂姐",
+                    "堂妹",
+                    "堂弟",
+                    "表兄",
+                    "表姐",
+                    "表妹",
+                    "表弟"
+                ],
+                "description": "Cousin"
+            },
+            "HasRelative": {
+                "example": [
+                    "亲戚",
+                    "远房亲戚",
+                    "远亲"
+                ],
+                "description": "Extended family member"
+            },
+            "HasChildhoodFriend": {
+                "example": [
+                    "青梅竹马",
+                    "青梅",
+                    "幼驯染",
+                    "儿时玩伴",
+                    "儿时友人"
+                ],
+                "description": "Childhood friend"
+            },
+            "HasFriend": {
+                "example": [
+                    "朋友",
+                    "好友",
+                    "友人",
+                    "玩伴"
+                ],
+                "description": "Friend"
+            },
+            "HasBestFriend": {
+                "example": [
+                    "挚友",
+                    "至交"
+                ],
+                "description": "Best friend"
+            },
+            "HasCompanion": {
+                "example": [
+                    "同伴",
+                    "伙伴",
+                    "搭档"
+                ],
+                "description": "Companion or partner"
+            },
+            "HasComrade": {
+                "example": [
+                    "战友",
+                    "并肩作战",
+                    "同袍",
+                    "战场伙伴"
+                ],
+                "description": "Comrade-in-arms"
+            },
+            "HasLover": {
+                "example": [
+                    "恋人",
+                    "爱人",
+                    "伴侣",
+                    "恋情",
+                    "对象",
+                    "爱慕",
+                    "喜欢的人",
+                    "男友",
+                    "女友"
+                ],
+                "description": "Romantic partner"
+            },
+            "HasSpouse": {
+                "example": [
+                    "丈夫",
+                    "妻子",
+                    "配偶",
+                    "老公",
+                    "老婆",
+                    "妻"
+                ],
+                "description": "Spouse"
+            },
+            "HasExLover": {
+                "example": [
+                    "前女友",
+                    "前男友",
+                    "前任"
+                ],
+                "description": "Former romantic partner"
+            },
+            "HasRomanticRival": {
+                "example": [
+                    "情敌"
+                ],
+                "description": "Romantic rival"
+            },
+            "IsCoupledWith": {
+                "example": [
+                    "CP",
+                    "cp",
+                    "官配"
+                ],
+                "description": "Canonical or fandom-recognized pairing"
+            },
+            "HasPeer": {
+                "example": [
+                    "同期",
+                    "同级",
+                    "校友",
+                    "同学",
+                    "同班",
+                    "同门"
+                ],
+                "description": "Peer or equal-status relationship"
+            },
+            "HasSenior": {
+                "example": [
+                    "学长",
+                    "学姐",
+                    "前辈"
+                ],
+                "description": "Senior peer"
+            },
+            "HasJunior": {
+                "example": [
+                    "学弟",
+                    "学妹",
+                    "后辈"
+                ],
+                "description": "Junior peer"
+            },
+            "HasMentor": {
+                "example": [
+                    "导师",
+                    "指导老师",
+                    "师父",
+                    "师傅",
+                    "老师",
+                    "教师",
+                    "班主任"
+                ],
+                "description": "Mentor or teacher"
+            },
+            "HasStudent": {
+                "example": [
+                    "学生",
+                    "弟子",
+                    "徒弟"
+                ],
+                "description": "Student or disciple"
+            },
+            "HasSuperior": {
+                "example": [
+                    "上司",
+                    "指挥官",
+                    "队长",
+                    "长官"
+                ],
+                "description": "Superior or commanding officer"
+            },
+            "HasSubordinate": {
+                "example": [
+                    "部下",
+                    "下属",
+                    "属下",
+                    "副官",
+                    "助手"
+                ],
+                "description": "Subordinate"
+            },
+            "HasColleague": {
+                "example": [
+                    "同事",
+                    "同僚"
+                ],
+                "description": "Colleague"
+            },
+            "HasMaster": {
+                "example": [
+                    "主人",
+                    "主君",
+                    "君主",
+                    "雇主",
+                    "领主",
+                    "大小姐",
+                    "少爷",
+                    "主上",
+                    "主公"
+                ],
+                "description": "Master or lord"
+            },
+            "HasServant": {
+                "example": [
+                    "仆人",
+                    "仆从",
+                    "侍从",
+                    "随从",
+                    "家臣",
+                    "女仆",
+                    "男仆",
+                    "执事",
+                    "从者"
+                ],
+                "description": "Servant or retainer"
+            },
+            "HasContractWith": {
+                "example": [
+                    "契约"
+                ],
+                "description": "Contractual or bound relationship"
+            },
+            "HasEnemy": {
+                "example": [
+                    "敌人",
+                    "宿敌",
+                    "仇敌",
+                    "敌对",
+                    "仇人",
+                    "死敌",
+                    "敌"
+                ],
+                "description": "Enemy or hostile relationship"
+            },
+            "HasRival": {
+                "example": [
+                    "对手",
+                    "竞争对手",
+                    "对立"
+                ],
+                "description": "Rival relationship"
+            },
+            "HasBenefactor": {
+                "example": [
+                    "恩人"
+                ],
+                "description": "Benefactor or life-saver"
+            },
+            "IsPossessedBy": {
+                "example": [
+                    "被附身",
+                    "肉体占据"
+                ],
+                "description": "Possession relationship"
+            },
+            "IsFanOf": {
+                "example": [
+                    "粉丝",
+                    "迷妹",
+                    "迷弟",
+                    "偶像"
+                ],
+                "description": "Fan or admiration relationship"
+            }
+        }
+    }
+}

@@ -1,4 +1,5 @@
 import logging
+
 logger = logging.getLogger(__name__)
 
 from flask import Blueprint, jsonify, request
@@ -22,9 +23,10 @@ TFIDF_ALIGNER = TFIDFAligner(ent_dir="app/ent_aug")
 # ============ LLM 客户端（OpenAI 兼容）============
 LLM_CLIENT = OpenAI(
     api_key="sk-tahcowcdmrkhavgytieftbuiwyejajagthkkesunkygznxvo",
-    base_url="https://api.siliconflow.cn/v1"
+    base_url="https://api.siliconflow.cn/v1",
 )
 LLM_MODEL = "Qwen/Qwen2.5-7B-Instruct"
+
 
 def _call_llm(system_prompt: str, user_prompt: str, temperature: float = 0.0) -> str:
     # 如果没配置 key，就不给 LLM，后面会走模板回答
@@ -39,6 +41,7 @@ def _call_llm(system_prompt: str, user_prompt: str, temperature: float = 0.0) ->
         temperature=temperature,
     )
     return resp.choices[0].message.content.strip()
+
 
 def _safe_json_loads(s: str) -> dict:
     """
@@ -58,6 +61,7 @@ def _safe_json_loads(s: str) -> dict:
         return json.loads(m.group(0))
     except Exception:
         return {}
+
 
 def _intent_recognition(query: str) -> dict:
     system_prompt = "你是一个【动漫知识图谱查询解析器】。"
@@ -150,6 +154,7 @@ def _intent_recognition(query: str) -> dict:
 """
     raw = _call_llm(system_prompt, user_prompt, temperature=0.0)
     return _safe_json_loads(raw)
+
 
 @bp.route("/ping", methods=["GET"])
 def ping():
@@ -356,7 +361,7 @@ def query_path():
 
 @bp.route("/qa", methods=["POST"])
 def qa_route():
-    current_app.logger.info("qa_route 被调用")
+    # current_app.logger.info("qa_route 被调用")
 
     data = request.get_json()
     query = data.get("query")
@@ -541,7 +546,9 @@ def qa_route():
             # 属性边：写回 source 节点 properties
             if rel_type in ATTRIBUTE_RELATIONS:
                 if src in node_ids:
-                    node_ids[src]["properties"][rel_type] = rel_props.get("value", b_node.get("name"))
+                    node_ids[src]["properties"][rel_type] = rel_props.get(
+                        "value", b_node.get("name")
+                    )
                 # evidence 也记一条
                 val = rel_props.get("value") or b_node.get("name")
                 evidence.append(f"{a_node.get('name')} 的 {rel_type} 是 {val}")
@@ -554,19 +561,24 @@ def qa_route():
                         "properties": rel_props,
                     }
                 )
-                evidence.append(f"{a_node.get('name')} -[{rel_type}]-> {b_node.get('name')}")
+                evidence.append(
+                    f"{a_node.get('name')} -[{rel_type}]-> {b_node.get('name')}"
+                )
 
     # ========= ④ LLM 根据证据生成答案（严格基于 evidence）=========
     # 如果没配置 key，就用模板回答
     if evidence and LLM_CLIENT.api_key:
         system_prompt = "你是一个动漫/人物知识图谱问答助手，必须严格基于给定证据回答。"
         user_prompt = (
-                "证据如下（只可使用这些证据）：\n"
-                + "\n".join(f"- {e}" for e in evidence[:30])
-                + f"\n\n用户问题：{query}\n"
-                + "如果证据不足以回答，输出：根据已知信息无法回答该问题。"
+            "证据如下（只可使用这些证据）：\n"
+            + "\n".join(f"- {e}" for e in evidence[:30])
+            + f"\n\n用户问题：{query}\n"
+            + "如果证据不足以回答，输出：根据已知信息无法回答该问题。"
         )
-        answer = _call_llm(system_prompt, user_prompt, temperature=0.3) or "根据已知信息无法回答该问题。"
+        answer = (
+            _call_llm(system_prompt, user_prompt, temperature=0.3)
+            or "根据已知信息无法回答该问题。"
+        )
     else:
         # 模板：有证据就直接返回第一条/汇总，否则无法回答
         answer = evidence[0] if evidence else "根据已知信息无法回答该问题。"

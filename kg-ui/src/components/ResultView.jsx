@@ -80,7 +80,7 @@ export default function ResultView({ mode, result, error }) {
   if (mode === "query") {
     const path = result.path || { nodes: [], links: [] };
     const shortest = result.shortest || null;
-    console.log(result);
+    // console.log(result);
 
     return (
       <div className="result-block" style={styles.block}>

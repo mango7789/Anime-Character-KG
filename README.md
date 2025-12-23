@@ -3,12 +3,28 @@
 ### 数据爬取与知识抽取
 ```
 cd kg-extract
-## 抽取动画信息
+```
+
+爬取动画信息
+```
 python moegirl_anime.py
-## 抽取角色信息（按动画归类）
+```
+
+爬取角色信息（按动画归类）
+```
 python moegirl_anime_character.py
 ```
 
+抽取动画知识
+修改input_path为爬虫的output_path
+```
+python extract_tuple_anime.py
+```
+
+抽取角色知识
+```
+python extract_tuple_character.py
+```
 
 ### 前端
 

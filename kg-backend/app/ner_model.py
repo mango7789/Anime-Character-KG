@@ -393,7 +393,7 @@ def get_ner_result(model, tokenizer, text, rule_ner, tfidf_aligner, device, idx2
     fallback = tfidf_aligner.search_best(
         query=text,
         ent_type="Character",
-        threshold=0.1,
+        threshold=0.3,
     )
 
     if fallback:

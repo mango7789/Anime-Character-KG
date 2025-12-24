@@ -22,9 +22,9 @@ if __name__ == "__main__":
             text = fetch_page_wikitext(anime)
 
         results[anime] = text
-        if (i+1) % 10 == 0:
+        if (i + 1) % 10 == 0:
             save_json(results, output_path)
-            print(f'{i}步,保存中间结果')
-    
+            print(f"{i}步,保存中间结果")
+
     save_json(results, output_path)
     # print((text))

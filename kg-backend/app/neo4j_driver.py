@@ -63,11 +63,12 @@ class Neo4jDriver:
         )
 
         # ===== 情况 1：tail 是属性 =====
+        relation_safe = f"`{relation}`"
         if tail_label in ATTRIBUTE_RELATIONS:
             tx.run(
                 f"""
                 MATCH (h:{head_label} {{name: $head}})
-                SET h.{tail_label} = $value
+                SET h.{relation_safe} = coalesce(h.{relation_safe}, []) + $value
                 """,
                 head=head,
                 value=tail,
@@ -75,7 +76,6 @@ class Neo4jDriver:
             return
 
         # ===== 情况 2：tail 是实体 =====
-        relation_safe = f"`{relation}`"
         tx.run(
             f"""
             MATCH (h:{head_label} {{name: $head}})

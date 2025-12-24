@@ -1,7 +1,3 @@
-import logging
-
-logger = logging.getLogger(__name__)
-
 from flask import Blueprint, jsonify, request
 from .neo4j_driver import Neo4jDriver
 from .constants import ATTRIBUTE_RELATIONS, RELATION_RELATIONS
@@ -42,6 +38,7 @@ def _call_llm(system_prompt: str, user_prompt: str, temperature: float = 0.0) ->
     )
     return resp.choices[0].message.content.strip()
 
+
 def _safe_json_loads(s: str) -> dict:
     """
     允许 LLM 输出前后带一些无关文字，尽量从中抠出 JSON
@@ -60,6 +57,7 @@ def _safe_json_loads(s: str) -> dict:
         return json.loads(m.group(0))
     except Exception:
         return {}
+
 
 def _intent_recognition(query: str, entities: dict) -> dict:
     system_prompt = """你是一个【动漫知识图谱查询解析器】。你的任务是从用户问题中识别：
@@ -151,9 +149,10 @@ def _intent_recognition(query: str, entities: dict) -> dict:
 - IsPossessedBy
 - IsHostOf
 """
-    user_prompt = f"用户输入：\n\"{query}\"\n\n实体识别：\n\"{entities}\""
+    user_prompt = f'用户输入：\n"{query}"\n\n实体识别：\n"{entities}"'
     raw = _call_llm(system_prompt, user_prompt, temperature=0.0)
     return _safe_json_loads(raw)
+
 
 def build_cypher_plan(
     query_mode: str,
@@ -288,8 +287,10 @@ def build_cypher_plan(
             }
         )
 
-        return plans, {"name": anchor, "type": anchor_type}, (
-            {"name": second, "type": second_type} if second else None
+        return (
+            plans,
+            {"name": anchor, "type": anchor_type},
+            ({"name": second, "type": second_type} if second else None),
         )
 
     # ---- 4) get_property：查属性值（优先属性边）----
@@ -319,7 +320,11 @@ def build_cypher_plan(
                     RETURN a, b, r
                     LIMIT 50
                 """,
-                "params": {"a": anchor, "preds": preds, "attr_rels": list(ATTRIBUTE_RELATIONS)},
+                "params": {
+                    "a": anchor,
+                    "preds": preds,
+                    "attr_rels": list(ATTRIBUTE_RELATIONS),
+                },
             }
         )
         # plan2：放宽为通用谓词（有些“属性”可能被建成普通边）
@@ -428,11 +433,13 @@ def _node_label(n):
     except Exception:
         return "default"
 
+
 def _node_name(n):
     try:
         return n.get("name")
     except Exception:
         return None
+
 
 def build_evidence_line(a_node, b_node, rel, attr_rels: set):
     a_name, a_label = _node_name(a_node), _node_label(a_node)
@@ -665,8 +672,6 @@ def query_path():
 
 @bp.route("/qa", methods=["POST"])
 def qa_route():
-    # current_app.logger.info("qa_route 被调用")
-
     data = request.get_json()
     query = data.get("query")
     if not query:
@@ -683,17 +688,15 @@ def qa_route():
         device=None,
         idx2tag=None,
     )
-    # entities_by_type 形如 {"Work":[...], "Character":[...]}
-    # 我们优先取 Character，其次 Work 等
-    focus_entities = []
-    for t in ["Character", "Work", "Person", "Organization", "Group", "Location"]:
-        focus_entities.extend(entities_by_type.get(t, []))
+    print(entities_by_type)
 
-    # ========= ② 意图识别：LLM 输出 domain/relation/multi_entity =========
-    intent = _intent_recognition(query)
-    domain = intent.get("domain") or ""
-    relation = intent.get("relation") or ""
-    multi_entity = bool(intent.get("multi_entity"))
+    # ========= ② 意图识别：LLM 输出 query_mode/query_predicate/source_entity_type/result_value_type =========
+    intent = _intent_recognition(query, entities_by_type)
+    query_mode = (intent.get("query_mode") or "").strip()
+    query_predicate = (intent.get("query_predicate") or "").strip()
+    source_entity_type = (intent.get("source_entity_type") or "").strip()
+    result_value_type = (intent.get("result_value_type") or "").strip()
+    print(intent)
 
     # ========= ③ 构造 Cypher：用 schema 关系去查图谱 =========
     evidence = []
@@ -706,7 +709,7 @@ def qa_route():
         query_predicate=query_predicate,
         source_entity_type=source_entity_type,
         result_value_type=result_value_type,
-        entities_by_type=entities_by_type
+        entities_by_type=entities_by_type,
     )
 
     if not plans or not anchor:
@@ -719,144 +722,90 @@ def qa_route():
             }
         )
 
-    # 选实体：多实体取前2个，单实体取第1个
-    #ent_a = focus_entities[0]
-    #ent_b = focus_entities[1] if (multi_entity and len(focus_entities) >= 2) else None
-    ent_a = focus_entities[0]
-    ent_b = focus_entities[1] if len(focus_entities) >= 2 else None
+    ent_a, ent_a_type = anchor["name"], anchor["type"]
+    ent_b, ent_b_type = secondary["name"] if secondary else None, (
+        secondary["type"] if secondary else None
+    )
 
-
-    # 对关系做个兜底：如果 LLM 没给 relation，就尝试从 query 中猜一个
-    # （你也可以删除这段，仅依赖 LLM）
-    if not relation:
-        # 简单启发式：包含“声优” -> VoiceBy
-        if "声优" in query:
-            relation = "VoiceBy"
-
-    # 如果还是没有 relation：直接查“与该实体相关的边”做证据，再让 LLM 根据证据回答
-    fallback_relation_free = False
-    if not relation:
-        fallback_relation_free = True
-
+    # 定位实体对应的节点
     with driver.driver.session() as session:
-        # 先把 focus 实体对应的节点拿到（用于 focusNodeIds）
-        # 优先按 domain label 找，如果 domain 为空就不限定 label
-        if domain:
+        if ent_a_type:
             rec = session.run(
-                f"""
-                MATCH (n:{domain} {{name:$name}})
-                RETURN id(n) AS id, labels(n)[0] AS label, n.name AS name, properties(n) AS props
-                """,
+                f"MATCH (n:{ent_a_type} {{name:$name}}) RETURN id(n) AS id",
                 name=ent_a,
             ).single()
         else:
             rec = session.run(
-                """
-                MATCH (n {name:$name})
-                RETURN id(n) AS id, labels(n)[0] AS label, n.name AS name, properties(n) AS props
-                """,
+                "MATCH (n {name:$name}) RETURN id(n) AS id",
                 name=ent_a,
             ).single()
-
         if rec:
             focusNodeIds.append(str(rec["id"]))
 
-        if ent_b:
-            if domain:
-                rec2 = session.run(
-                    f"""
-                    MATCH (n:{domain} {{name:$name}})
-                    RETURN id(n) AS id, labels(n)[0] AS label, n.name AS name, properties(n) AS props
-                    """,
-                    name=ent_b,
-                ).single()
-            else:
-                rec2 = session.run(
-                    """
-                    MATCH (n {name:$name})
-                    RETURN id(n) AS id, labels(n)[0] AS label, n.name AS name, properties(n) AS props
-                    """,
-                    name=ent_b,
-                ).single()
+        if ent_b and ent_b_type:
+            rec2 = session.run(
+                f"MATCH (n:{ent_b_type} {{name:$name}}) RETURN id(n) AS id",
+                name=ent_b,
+            ).single()
             if rec2:
                 focusNodeIds.append(str(rec2["id"]))
 
-        # ---------- 主查询 ----------
-        if fallback_relation_free:
-            # 不指定关系：拉取实体的一圈邻居做证据
-            result = session.run(
-                """
-                MATCH (a {name:$name})-[r]-(b)
-                RETURN a, b, r
-                LIMIT 50
-                """,
-                name=ent_a,
-            )
+    # 执行 plans：按顺序尝试，取第一个有结果的
+    with driver.driver.session() as session:
+        result_rows = []
+        used_plan = None
+        for p in plans:
+            rows = list(session.run(p["cypher"], **p["params"]))
+            if rows:
+                result_rows = rows
+                used_plan = p["plan_name"]
+                break
+
+        # 如果所有 plan 都没结果，就返回空（后面 evidence 会空）
+        result = result_rows
+        print("used_plan:", used_plan, "rows:", len(result_rows))
+
+    # 组装 evidence + subgraph
+    node_ids = {}
+
+    def _add_node(n):
+        nid = n.id
+        if nid in node_ids:
+            return
+        label = next(iter(n.labels), "default")
+        props = dict(n.items())
+        name = props.get("name")
+        props = {k: v for k, v in props.items() if k != "name"}
+        node_obj = {"id": nid, "name": name, "group": label, "properties": props}
+        node_ids[nid] = node_obj
+        nodes.append(node_obj)
+
+    evidence_set = set()
+    link_seen = set()
+    MAX_EVIDENCE = 30
+    for record in result:
+        a_node = record["a"]
+        b_node = record["b"]
+        rel = record["r"]
+
+        _add_node(a_node)
+        _add_node(b_node)
+
+        rel_type = rel.type
+        rel_props = dict(rel.items())
+        src = rel.start_node.id
+        tgt = rel.end_node.id
+
+        # --- subgraph: 属性边写回节点；关系边进 links ---
+        if rel_type in ATTRIBUTE_RELATIONS:
+            a_id = a_node.id
+            b_name = _node_name(b_node)
+            if a_id in node_ids:
+                node_ids[a_id]["properties"][rel_type] = rel_props.get("value", b_name)
         else:
-            if ent_b:
-                # 双实体关系查询：限定 type(r)=relation
-                result = session.run(
-                    """
-                    MATCH (a {name:$a})-[r]-(b {name:$b})
-                    WHERE type(r) = $rel
-                    RETURN a, b, r
-                    LIMIT 50
-                    """,
-                    a=ent_a,
-                    b=ent_b,
-                    rel=relation,
-                )
-            else:
-                # 单实体：查询 a -[relation]-> x
-                result = session.run(
-                    """
-                    MATCH (a {name:$a})-[r]->(b)
-                    WHERE type(r) = $rel
-                    RETURN a, b, r
-                    LIMIT 50
-                    """,
-                    a=ent_a,
-                    rel=relation,
-                )
-
-        # ---------- 组装 evidence + subgraph ----------
-        node_ids = {}
-
-        def _add_node(n):
-            nid = n.id
-            if nid in node_ids:
-                return
-            label = next(iter(n.labels), "default")
-            props = dict(n.items())
-            name = props.get("name")
-            props = {k: v for k, v in props.items() if k != "name"}
-            node_obj = {"id": nid, "name": name, "group": label, "properties": props}
-            node_ids[nid] = node_obj
-            nodes.append(node_obj)
-
-        for record in result:
-            a_node = record["a"]
-            b_node = record["b"]
-            rel = record["r"]
-
-            _add_node(a_node)
-            _add_node(b_node)
-
-            rel_type = rel.type
-            rel_props = dict(rel.items())
-            src = rel.start_node.id
-            tgt = rel.end_node.id
-
-            # 属性边：写回 source 节点 properties
-            if rel_type in ATTRIBUTE_RELATIONS:
-                if src in node_ids:
-                    node_ids[src]["properties"][rel_type] = rel_props.get(
-                        "value", b_node.get("name")
-                    )
-                # evidence 也记一条
-                val = rel_props.get("value") or b_node.get("name")
-                evidence.append(f"{a_node.get('name')} 的 {rel_type} 是 {val}")
-            else:
+            key = (src, tgt, rel_type)
+            if key not in link_seen:
+                link_seen.add(key)
                 links.append(
                     {
                         "source": src,
@@ -865,14 +814,20 @@ def qa_route():
                         "properties": rel_props,
                     }
                 )
-                evidence.append(
-                    f"{a_node.get('name')} -[{rel_type}]-> {b_node.get('name')}"
-                )
+
+        line = build_evidence_line(a_node, b_node, rel, set(ATTRIBUTE_RELATIONS))
+        if line and line not in evidence_set:
+            evidence_set.add(line)
+            evidence.append(line)
+            if len(evidence) >= MAX_EVIDENCE:
+                break
+    # print(evidence)
 
     # ========= ④ LLM 根据证据生成答案（严格基于 evidence）=========
-    # 如果没配置 key，就用模板回答
     if evidence and LLM_CLIENT.api_key:
-        system_prompt = "你是一个动漫/人物知识图谱问答助手，必须严格基于给定证据回答。"
+        system_prompt = (
+            f"你是一个动漫/人物知识图谱问答助手，严格基于给定证据回答用户问题。"
+        )
         user_prompt = (
             "证据如下（只可使用这些证据）：\n"
             + "\n".join(f"- {e}" for e in evidence[:30])
@@ -884,10 +839,7 @@ def qa_route():
             or "根据已知信息无法回答该问题。"
         )
     else:
-        # 模板：有证据就直接返回第一条/汇总，否则无法回答
-        answer = evidence[0] if evidence else "根据已知信息无法回答该问题。"
-
-    logger.info(f"返回结果: answer长度={len(answer)}, evidence数量={len(evidence)}")
+        answer = "根据已知信息无法回答该问题。"
 
     return jsonify(
         {

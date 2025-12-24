@@ -8,6 +8,7 @@ import React, {
 } from "react";
 import ForceGraph2D from "react-force-graph-2d";
 import { MODE_BG, MODE_COLORS } from "./Constant";
+import parse from "html-react-parser";
 
 // 可选调色板
 const COLOR_PALETTE = [
@@ -323,8 +324,8 @@ function GraphPanel({ graph, store, focusNodeIds }) {
                   display: "inline-block",
                 }}
               />
-              <span style={{fontSize: 12}}>
-                {group} ({count})
+              <span style={{ fontSize: 12 }}>
+                {parse(`${group} (${count})`)}
               </span>
             </div>
           );

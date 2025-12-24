@@ -34,7 +34,12 @@ export default function ResultView({ mode, result, error }) {
     return (
       <div
         className="result-block"
-        style={{ ...styles.block, borderColor: "rgba(255,107,107,.35)" }}
+        style={{
+          ...styles.block,
+          borderColor: "rgba(255,107,107,.35)",
+          height: "100%",
+          overflowY: "auto",
+        }}
       >
         <div style={{ ...styles.title, color: "var(--danger)" }}>发生错误</div>
         <div style={styles.note}>{String(error.message || error)}</div>
@@ -58,7 +63,14 @@ export default function ResultView({ mode, result, error }) {
   // ===== QA 模式 =====
   if (mode === "qa") {
     return (
-      <div className="result-block" style={styles.block}>
+      <div
+        className="result-block"
+        style={{
+          ...styles.block,
+          height: "100%",
+          overflowY: "auto",
+        }}
+      >
         <div style={styles.title}>答案</div>
 
         <div style={styles.body}>{result.answer}</div>
@@ -83,7 +95,14 @@ export default function ResultView({ mode, result, error }) {
     // console.log(result);
 
     return (
-      <div className="result-block" style={styles.block}>
+      <div
+        className="result-block"
+        style={{
+          ...styles.block,
+          height: "100%",
+          overflowY: "auto",
+        }}
+      >
         <div style={styles.title}>路径查询结果</div>
 
         <div style={styles.meta}>

@@ -1,4 +1,5 @@
 import requests
+
 # from curl_cffi import requests
 # from curl_cffi.const import CurlHttpVersion
 
@@ -41,7 +42,7 @@ if __name__ == "__main__":
             results[anime][char] = text
             if cnt % 10 == 0:
                 save_json(results, output_path)
-                print(f'{cnt+1}步,保存中间结果')
-    
+                print(f"{cnt+1}步,保存中间结果")
+
     save_json(results, output_path)
     # print((text))

@@ -288,6 +288,7 @@ class RuleNER:
                     used.add(i)
 
         return results
+
 # ===============================
 # 2. TF-IDF 实体规范化 / 兜底
 # ===============================
@@ -345,30 +346,7 @@ class TFIDFAligner:
                 )
 
         return result
-    '''
-    def search_best(self, query, ent_type="Character", threshold=0.3):
-        """
-        🔥 当 NER 完全失败时的兜底：
-        在指定实体类型全集中找最相似实体
-        """
-        if ent_type not in self.type2tfidf:
-            return None
 
-        tfidf = self.type2tfidf[ent_type]
-        ents = self.type2ents[ent_type]
-        vecs = self.type2vecs[ent_type]
-
-        qv = tfidf.transform([query])
-        sims = cosine_similarity(qv, vecs)[0]
-
-        idx = sims.argmax()
-        score = sims[idx]
-
-        if score >= threshold:
-            return ents[idx]
-
-        return None
-    '''
     def search_best(self, query, ent_types=None, threshold=0.3):
         """
         🔥 当 NER 完全失败时的兜底：
@@ -420,18 +398,8 @@ def get_ner_result(model, tokenizer, text, rule_ner, tfidf_aligner, device, idx2
 
     if ner_raw:
         return tfidf_aligner.align(ner_raw)
-    '''
-    # ② 兜底：Character 实体全集模糊搜索
-    fallback = tfidf_aligner.search_best(
-        query=text,
-        ent_type="Character",
-        threshold=0.3,
-    )
 
-    if fallback:
-        return {"Character": [fallback]}
-    '''
-# ② 兜底：对所有实体类型做全量模糊搜索
+    # ② 兜底：对所有实体类型做全量模糊搜索
     fallback_type, fallback_ent = tfidf_aligner.search_best(
         query=text,
         ent_types=rule_ner.entity_types,

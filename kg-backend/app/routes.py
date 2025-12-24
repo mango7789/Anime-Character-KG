@@ -42,7 +42,6 @@ def _call_llm(system_prompt: str, user_prompt: str, temperature: float = 0.0) ->
     )
     return resp.choices[0].message.content.strip()
 
-
 def _safe_json_loads(s: str) -> dict:
     """
     允许 LLM 输出前后带一些无关文字，尽量从中抠出 JSON
@@ -62,19 +61,45 @@ def _safe_json_loads(s: str) -> dict:
     except Exception:
         return {}
 
+def _intent_recognition(query: str, entities: dict) -> dict:
+    system_prompt = """你是一个【动漫知识图谱查询解析器】。你的任务是从用户问题中识别：
+1. query_mode: 这次查询要走哪种执行模式（查询属性/查询实体/探索关系）
+2. query_predicate: 用哪个属性/关系作为查询谓词
+3. source_entity_type: 查询从哪类实体节点出发
+4. result_value_type: 查询最终返回的值类型（属性/实体/关系）
 
-def _intent_recognition(query: str) -> dict:
-    system_prompt = "你是一个【动漫知识图谱查询解析器】。"
-    user_prompt = f"""
-你的任务是：
-- 从用户问题中识别：
-  1. 查询主体的实体类型（domain）
-  2. 用户想查询的关系（relation，必须来自给定 schema）
-  3. 是否为多实体关系查询（multi_entity）
+每个字段均为枚举型：
+1. query_mode: get_property | get_entity | find_relation
+2. query_predicate: 必须来自给定 schema
+3. source_entity_type: Character | Work | Person | Organization
+4. result_value_type: Property | Character | Work | Person | Organization | Relationship
+除query_mode字段为单值外，其余字段允许多值（用|分隔）
 
---------------------
+严格按 JSON 格式输出（不要多余文字）：
+{
+  "query_mode": "...",
+  "query_predicate": "...",
+  "source_entity_type": "...",
+  "result_value_type": "..."
+}
+
+---
+【可用属性 schema】
+【Character 属性关系】
+- Alias
+- BirthDate
+- Gender
+- Height
+- Weight
+- EyeColor
+- HairColor
+- LivingStatus
+- Origin
+- ActiveArea
+- CharacterTag
+
+---
 【可用关系 schema】
-
 【Work 相关关系】
 - OriginalAuthor
 - ChiefDirector
@@ -87,23 +112,10 @@ def _intent_recognition(query: str) -> dict:
 - FirstAiringDate
 - WorkCategory
 
-【Character 属性关系】
+【Character 相关关系】
 - AppearsIn
 - VoiceBy
-- Alias
-- BirthDate
-- Gender
-- Height
-- Weight
-- EyeColor
-- HairColor
-- LivingStatus
 - MemberOf
-- Origin
-- ActiveArea
-- CharacterTag
-
-【Character 人物关系】
 - HasParent
 - HasFather
 - HasMother
@@ -138,22 +150,314 @@ def _intent_recognition(query: str) -> dict:
 - HasSpouse
 - IsPossessedBy
 - IsHostOf
-
---------------------
-【输出格式（严格 JSON，不要多余文字）】
-
-{{
-  "domain": "Character | Work | Person | Organization",
-  "relation": "<关系名>",
-  "multi_entity": true | false
-}}
-
---------------------
-用户输入：
-"{query}"
 """
+    user_prompt = f"用户输入：\n\"{query}\"\n\n实体识别：\n\"{entities}\""
     raw = _call_llm(system_prompt, user_prompt, temperature=0.0)
     return _safe_json_loads(raw)
+
+def build_cypher_plan(
+    query_mode: str,
+    query_predicate: str,
+    source_entity_type: str,
+    result_value_type: str,
+    entities_by_type: dict,
+):
+    """
+    返回：
+      - plans: List[{"cypher": str, "params": dict, "plan_name": str}]
+      - anchor: {"name": str, "type": str}
+      - secondary: Optional[{"name": str, "type": str}]
+
+    设计原则：
+      1) 所有兜底/模板/回退都在这里做
+      2) intent 不参与“选实体”之外的任何逻辑（但 mode 会决定是否需要 second）
+    """
+
+    ALLOWED_TYPES = {"Character", "Work", "Person", "Organization", "Group", "Location"}
+    mode = (query_mode or "").strip()
+    pred_raw = (query_predicate or "").strip()
+
+    def _split_multi(s: str):
+        return [x.strip() for x in (s or "").split("|") if x.strip()]
+
+    def pick_first(t: str):
+        arr = (entities_by_type or {}).get(t, [])
+        return arr[0] if arr else None
+
+    def pick_anchor():
+        # ① 优先按 source_entity_type
+        for t in _split_multi(source_entity_type):
+            if t in ALLOWED_TYPES:
+                v = pick_first(t)
+                if v:
+                    return v, t
+        # ② 兜底按通用优先级
+        for t in ["Character", "Work", "Person", "Organization", "Group", "Location"]:
+            v = pick_first(t)
+            if v:
+                return v, t
+        return None, None
+
+    def pick_second(anchor_name: str, anchor_type: str):
+        # second 只在 find_relation 强相关；其他模式尽量不引入噪声
+        if mode != "find_relation":
+            return None, None
+
+        # 同类型第二个优先
+        if anchor_type:
+            arr = (entities_by_type or {}).get(anchor_type, [])
+            if len(arr) >= 2:
+                return arr[1], anchor_type
+
+        # 否则找其它类型的第一个（避免等于 anchor）
+        for t in ["Character", "Work", "Person", "Organization", "Group", "Location"]:
+            arr2 = (entities_by_type or {}).get(t, [])
+            if arr2 and arr2[0] != anchor_name:
+                return arr2[0], t
+
+        return None, None
+
+    def match_anchor(anchor_type: str):
+        # label 不可参数化，只能拼接；使用白名单避免注入
+        if anchor_type in ALLOWED_TYPES:
+            return f"(a:{anchor_type} {{name:$a}})"
+        return "(a {name:$a})"
+
+    def label_filter_clause(result_labels: list, var_name: str = "b"):
+        # 过滤返回端 b 的 label，减少 get_entity 噪声
+        if not result_labels:
+            return ""
+        return f" AND any(lbl IN labels({var_name}) WHERE lbl IN $result_labels) "
+
+    # ---- 1) 选实体 ----
+    anchor, anchor_type = pick_anchor()
+    if not anchor:
+        return [], None, None
+
+    second, second_type = pick_second(anchor, anchor_type)
+
+    # ---- 2) 解析 predicate / result labels ----
+    # find_relation 必须 Unknown（或空），这里强制归一化
+    if mode == "find_relation":
+        pred_raw = "Unknown"
+
+    preds = [p for p in _split_multi(pred_raw) if p.lower() != "unknown"]
+    # result_value_type 里可出现 Property / Relationship，这些不是 label，过滤掉
+    result_labels = [x for x in _split_multi(result_value_type) if x in ALLOWED_TYPES]
+
+    plans = []
+
+    # ---- 3) find_relation：两实体之间探索关系（不指定 predicate）----
+    if mode == "find_relation":
+        # 没 second 就无法 between，退化成邻居兜底（但这一般说明 NER 没抽到第二实体）
+        if second:
+            plans.append(
+                {
+                    "plan_name": "between_any_1hop",
+                    "cypher": """
+                        MATCH (a {name:$a})-[r]-(b {name:$b})
+                        RETURN a, b, r
+                        LIMIT 50
+                    """,
+                    "params": {"a": anchor, "b": second},
+                }
+            )
+            # 一跳没有关系就查最短路径（<=5）
+            plans.append(
+                {
+                    "plan_name": "between_shortest_path",
+                    "cypher": """
+                        MATCH p = allShortestPaths((a {name:$a})-[*..5]-(b {name:$b}))
+                        RETURN nodes(p) AS shortest_nodes, relationships(p) AS shortest_rels, length(p) AS shortest_length
+                        LIMIT 1
+                    """,
+                    "params": {"a": anchor, "b": second},
+                }
+            )
+
+        # 最后兜底：拉一圈邻居（给 LLM 证据）
+        plans.append(
+            {
+                "plan_name": "fallback_neighbors",
+                "cypher": """
+                    MATCH (a {name:$a})-[r]-(b)
+                    RETURN a, b, r
+                    LIMIT 50
+                """,
+                "params": {"a": anchor},
+            }
+        )
+
+        return plans, {"name": anchor, "type": anchor_type}, (
+            {"name": second, "type": second_type} if second else None
+        )
+
+    # ---- 4) get_property：查属性值（优先属性边）----
+    if mode == "get_property":
+        # predicate 为空时的兜底
+        if not preds:
+            plans.append(
+                {
+                    "plan_name": "fallback_neighbors",
+                    "cypher": """
+                        MATCH (a {name:$a})-[r]-(b)
+                        RETURN a, b, r
+                        LIMIT 50
+                    """,
+                    "params": {"a": anchor},
+                }
+            )
+            return plans, {"name": anchor, "type": anchor_type}, None
+
+        # plan1：只查属性边（ATTRIBUTE_RELATIONS）
+        plans.append(
+            {
+                "plan_name": "property_edges_only",
+                "cypher": f"""
+                    MATCH {match_anchor(anchor_type)}-[r]-(b)
+                    WHERE type(r) IN $preds AND type(r) IN $attr_rels
+                    RETURN a, b, r
+                    LIMIT 50
+                """,
+                "params": {"a": anchor, "preds": preds, "attr_rels": list(ATTRIBUTE_RELATIONS)},
+            }
+        )
+        # plan2：放宽为通用谓词（有些“属性”可能被建成普通边）
+        plans.append(
+            {
+                "plan_name": "property_by_predicate_fallback",
+                "cypher": f"""
+                    MATCH {match_anchor(anchor_type)}-[r]-(b)
+                    WHERE type(r) IN $preds
+                    RETURN a, b, r
+                    LIMIT 50
+                """,
+                "params": {"a": anchor, "preds": preds},
+            }
+        )
+        # plan3：最后兜底邻居
+        plans.append(
+            {
+                "plan_name": "fallback_neighbors",
+                "cypher": """
+                    MATCH (a {name:$a})-[r]-(b)
+                    RETURN a, b, r
+                    LIMIT 50
+                """,
+                "params": {"a": anchor},
+            }
+        )
+        return plans, {"name": anchor, "type": anchor_type}, None
+
+    # ---- 5) get_entity：按 predicate 返回实体（可按 result_value_type 过滤）----
+    if mode == "get_entity":
+        # predicate 为空时：兜底邻居
+        if not preds:
+            plans.append(
+                {
+                    "plan_name": "fallback_neighbors",
+                    "cypher": """
+                        MATCH (a {name:$a})-[r]-(b)
+                        RETURN a, b, r
+                        LIMIT 50
+                    """,
+                    "params": {"a": anchor},
+                }
+            )
+            return plans, {"name": anchor, "type": anchor_type}, None
+
+        # plan1：按 predicate 查邻居，并过滤 b 的 label（如果识别到了 result_value_type）
+        plans.append(
+            {
+                "plan_name": "entity_by_predicate_typed_b",
+                "cypher": f"""
+                    MATCH {match_anchor(anchor_type)}-[r]-(b)
+                    WHERE type(r) IN $preds
+                    {label_filter_clause(result_labels, "b")}
+                    RETURN a, b, r
+                    LIMIT 50
+                """,
+                "params": {"a": anchor, "preds": preds, "result_labels": result_labels},
+            }
+        )
+        # plan2：不做 label 过滤（容错 result_value_type 错）
+        plans.append(
+            {
+                "plan_name": "entity_by_predicate_no_type_filter",
+                "cypher": f"""
+                    MATCH {match_anchor(anchor_type)}-[r]-(b)
+                    WHERE type(r) IN $preds
+                    RETURN a, b, r
+                    LIMIT 50
+                """,
+                "params": {"a": anchor, "preds": preds},
+            }
+        )
+        # plan3：最后兜底邻居
+        plans.append(
+            {
+                "plan_name": "fallback_neighbors",
+                "cypher": """
+                    MATCH (a {name:$a})-[r]-(b)
+                    RETURN a, b, r
+                    LIMIT 50
+                """,
+                "params": {"a": anchor},
+            }
+        )
+        return plans, {"name": anchor, "type": anchor_type}, None
+
+    # ---- 6) UNKNOWN mode：兜底邻居 ----
+    plans.append(
+        {
+            "plan_name": "fallback_neighbors",
+            "cypher": """
+                MATCH (a {name:$a})-[r]-(b)
+                RETURN a, b, r
+                LIMIT 50
+            """,
+            "params": {"a": anchor},
+        }
+    )
+    return plans, {"name": anchor, "type": anchor_type}, None
+
+
+def _node_label(n):
+    try:
+        return next(iter(n.labels), "default")
+    except Exception:
+        return "default"
+
+def _node_name(n):
+    try:
+        return n.get("name")
+    except Exception:
+        return None
+
+def build_evidence_line(a_node, b_node, rel, attr_rels: set):
+    a_name, a_label = _node_name(a_node), _node_label(a_node)
+    b_name, b_label = _node_name(b_node), _node_label(b_node)
+    rel_type = rel.type
+    rel_props = dict(rel.items())
+
+    # 属性边：优先用 rel_props.value，否则用 b_name 作为值
+    if rel_type in attr_rels:
+        val = rel_props.get("value")
+        if val is None or val == "":
+            val = b_name
+        return f"{a_name}({a_label}) 的 {rel_type} 是 {val}"
+
+    # 普通关系边：给出方向（按 start/end）
+    src_name = _node_name(rel.start_node)
+    tgt_name = _node_name(rel.end_node)
+    # 方向字符串：如果 a_node 刚好是 start_node，就显示 a -> b，否则 b -> a
+    if src_name == a_name and tgt_name == b_name:
+        return f"{a_name}({a_label}) -[{rel_type}]-> {b_name}({b_label})"
+    elif src_name == b_name and tgt_name == a_name:
+        return f"{b_name}({b_label}) -[{rel_type}]-> {a_name}({a_label})"
+    else:
+        # 兜底：不强求方向一致
+        return f"{a_name}({a_label}) -[{rel_type}]- {b_name}({b_label})"
 
 
 @bp.route("/ping", methods=["GET"])
@@ -368,16 +672,6 @@ def qa_route():
     if not query:
         return jsonify({"error": "Missing 'query'"}), 400
 
-    logger.info(f"QA请求: {query}")
-
-    # answer = f"模拟回答: {query}"
-    # evidence = []
-    # subgraph = {
-    #     "nodes": [{"id": "1", "name": "Alice"}, {"id": "2", "name": "Bob"}],
-    #     "links": [{"source": "1", "target": "2", "type": "friend"}],
-    # }
-    # focusNodeIds = ["1", "2"]
-
     # ========= ① NER：从自然语言里抽实体 =========
     # zwk.get_ner_result 接口需要 model/tokenizer/device/idx2tag，但在规则NER实现里是兼容占位
     entities_by_type = get_ner_result(
@@ -407,8 +701,15 @@ def qa_route():
     links = []
     focusNodeIds = []
 
-    # 没抽到实体时直接返回
-    if not focus_entities:
+    plans, anchor, secondary = build_cypher_plan(
+        query_mode=query_mode,
+        query_predicate=query_predicate,
+        source_entity_type=source_entity_type,
+        result_value_type=result_value_type,
+        entities_by_type=entities_by_type
+    )
+
+    if not plans or not anchor:
         return jsonify(
             {
                 "answer": "根据已知信息无法回答该问题。",

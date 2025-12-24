@@ -91,24 +91,25 @@ class RuleNER:
                     if not ent:
                         continue
 
-                    # ========== 1️⃣ 完整实体 ==========
-                    self.automata[idx].add_word(ent, ent)
+                    # 1️⃣ 完整实体
+                    self.automata[idx].add_word(ent, (ent, ent))
 
-                    # ========== 2️⃣ 点分割名：蒙奇·D·路飞 → 路飞 ==========
+                    # 2️⃣ 点分割名
                     if "·" in ent:
                         key = ent.split("·")[-1]
                         if len(key) >= min_len:
-                            self.automata[idx].add_word(key, ent)
+                            self.automata[idx].add_word(key, (key, ent))
 
-                    # ========== 3️⃣ 中文姓名：漩涡鸣人 → 鸣人 ==========
-                    # 只对 Character / Person 生效，避免乱匹配
+                    # 3️⃣ 中文姓名尾部
                     if ent_type in ("Character", "Person") and len(ent) >= 3:
                         key = ent[-2:]
                         if len(key) >= min_len:
-                            self.automata[idx].add_word(key, ent)
+                            self.automata[idx].add_word(key, (key, ent))
+
 
         for a in self.automata:
             a.make_automaton()
+
 
     def find(self, text):
         """
@@ -120,9 +121,7 @@ class RuleNER:
 
         for idx, automaton in enumerate(self.automata):
             etype = self.entity_types[idx]
-            for end, canonical in automaton.iter(text):
-                # ⚠️ 用 alias 的长度算 start
-                alias = canonical.split("·")[-1]
+            for end, (alias, canonical) in automaton.iter(text):
                 start = end - len(alias) + 1
 
                 if any(i in used for i in range(start, end + 1)):
@@ -133,7 +132,6 @@ class RuleNER:
                     used.add(i)
 
         return results
-
 
 
 # ===============================

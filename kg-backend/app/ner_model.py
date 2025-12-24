@@ -263,11 +263,6 @@ class RuleNER:
                         if len(key) >= min_len:
                             self.automata[idx].add_word(key, (key, ent))
 
-                    # 3️⃣ 中文姓名尾部：漩涡鸣人 → 鸣人
-                    if ent_type in ("Character", "Person") and len(ent) >= 3:
-                        key = ent[-2:]
-                        if len(key) >= min_len:
-                            self.automata[idx].add_word(key, (key, ent))
 
         for a in self.automata:
             a.make_automaton()

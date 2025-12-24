@@ -42,9 +42,28 @@ class RuleNER:
         for a in self.automata:
             a.make_automaton()
         
+
+    def find(self, text):
+
+        results = []
+        used = set()
+
+        for idx, automaton in enumerate(self.automata):
+            etype = self.entity_types[idx]
+            for end, word in automaton.iter(text):
+                start = end - len(word) + 1
+                if any(i in used for i in range(start, end + 1)):
+                    continue
+                results.append((start, end, etype, word))
+                for i in range(start, end + 1):
+                    used.add(i)
+
+        return results
     '''
-
-
+class RuleNER:
+    """
+    只负责识别【可指称实体节点】
+    """
 
     def __init__(self, ent_dir="data/ent_aug", min_len=2):
         self.entity_types = [
@@ -64,44 +83,32 @@ class RuleNER:
             if not os.path.exists(path):
                 continue
 
+            idx = self.type2idx[ent_type]
+
             with open(path, encoding="utf-8") as f:
                 for line in f:
                     ent = line.strip()
                     if not ent:
                         continue
 
-                    # ⭐ 1. 加完整实体
-                    self.automata[self.type2idx[ent_type]].add_word(ent, ent)
+                    # ========== 1️⃣ 完整实体 ==========
+                    self.automata[idx].add_word(ent, ent)
 
-                    # ⭐ 2. 加「尾部关键子串」（如：路飞）
-                    if len(ent) >= 3:
-                        key = ent.split("·")[-1]  # 蒙奇·D·路飞 → 路飞
+                    # ========== 2️⃣ 点分割名：蒙奇·D·路飞 → 路飞 ==========
+                    if "·" in ent:
+                        key = ent.split("·")[-1]
                         if len(key) >= min_len:
-                            self.automata[self.type2idx[ent_type]].add_word(
-                                key, ent
-                            )
+                            self.automata[idx].add_word(key, ent)
+
+                    # ========== 3️⃣ 中文姓名：漩涡鸣人 → 鸣人 ==========
+                    # 只对 Character / Person 生效，避免乱匹配
+                    if ent_type in ("Character", "Person") and len(ent) >= 3:
+                        key = ent[-2:]
+                        if len(key) >= min_len:
+                            self.automata[idx].add_word(key, ent)
 
         for a in self.automata:
             a.make_automaton()
-
-    '''
-    def find(self, text):
-
-        results = []
-        used = set()
-
-        for idx, automaton in enumerate(self.automata):
-            etype = self.entity_types[idx]
-            for end, word in automaton.iter(text):
-                start = end - len(word) + 1
-                if any(i in used for i in range(start, end + 1)):
-                    continue
-                results.append((start, end, etype, word))
-                for i in range(start, end + 1):
-                    used.add(i)
-
-        return results
-    '''
 
     def find(self, text):
         """
@@ -114,7 +121,9 @@ class RuleNER:
         for idx, automaton in enumerate(self.automata):
             etype = self.entity_types[idx]
             for end, canonical in automaton.iter(text):
-                start = end - len(canonical.split("·")[-1]) + 1
+                # ⚠️ 用 alias 的长度算 start
+                alias = canonical.split("·")[-1]
+                start = end - len(alias) + 1
 
                 if any(i in used for i in range(start, end + 1)):
                     continue

@@ -1,0 +1,197 @@
+import os
+import ahocorasick
+from sklearn.feature_extraction.text import TfidfVectorizer
+from sklearn.metrics.pairwise import cosine_similarity
+
+
+# ===============================
+# 1. 规则实体匹配（Aho-Corasick）
+# ===============================
+
+class RuleNER:
+    """
+    只负责识别【可指称实体节点】
+    """
+
+    def __init__(self, ent_dir="data/ent_aug", min_len=2):
+        self.entity_types = [
+            "Work",
+            "Character",
+            "Person",
+            "Organization",
+            "Group",
+            "Location",
+        ]
+
+        self.type2idx = {t: i for i, t in enumerate(self.entity_types)}
+        self.automata = [ahocorasick.Automaton() for _ in self.entity_types]
+
+        for ent_type in self.entity_types:
+            path = os.path.join(ent_dir, f"{ent_type}.txt")
+            if not os.path.exists(path):
+                continue
+
+            idx = self.type2idx[ent_type]
+
+            with open(path, encoding="utf-8") as f:
+                for line in f:
+                    ent = line.strip()
+                    if not ent:
+                        continue
+
+                    # 1️⃣ 完整实体
+                    self.automata[idx].add_word(ent, (ent, ent))
+
+                    # 2️⃣ 点分割名：蒙奇·D·路飞 → 路飞
+                    if "·" in ent:
+                        key = ent.split("·")[-1]
+                        if len(key) >= min_len:
+                            self.automata[idx].add_word(key, (key, ent))
+
+
+        for a in self.automata:
+            a.make_automaton()
+
+    def find(self, text):
+        """
+        返回：
+        [(start, end, entity_type, canonical_entity), ...]
+        """
+        results = []
+        used = set()
+
+        for idx, automaton in enumerate(self.automata):
+            etype = self.entity_types[idx]
+            for end, (alias, canonical) in automaton.iter(text):
+                start = end - len(alias) + 1
+
+                if any(i in used for i in range(start, end + 1)):
+                    continue
+
+                results.append((start, end, etype, canonical))
+                for i in range(start, end + 1):
+                    used.add(i)
+
+        return results
+
+# ===============================
+# 2. TF-IDF 实体规范化 / 兜底
+# ===============================
+
+class TFIDFAligner:
+    """
+    用于：
+    - 别名对齐
+    - 模糊匹配
+    - 全量兜底搜索
+    """
+
+    def __init__(self, ent_dir="data/ent_aug"):
+        self.type2ents = {}
+        self.type2vecs = {}
+        self.type2tfidf = {}
+
+        for file in os.listdir(ent_dir):
+            if not file.endswith(".txt"):
+                continue
+
+            ent_type = file.replace(".txt", "")
+            path = os.path.join(ent_dir, file)
+
+            with open(path, encoding="utf-8") as f:
+                ents = [l.strip() for l in f if l.strip()]
+
+            if not ents:
+                continue
+
+            tfidf = TfidfVectorizer(analyzer="char")
+            vecs = tfidf.fit_transform(ents).toarray()
+
+            self.type2ents[ent_type] = ents
+            self.type2vecs[ent_type] = vecs
+            self.type2tfidf[ent_type] = tfidf
+
+    def align(self, ner_results, threshold=0.5):
+        """
+        对规则 NER 的结果做规范化
+        """
+        result = {}
+
+        for _, _, ent_type, word in ner_results:
+            if ent_type not in self.type2tfidf:
+                continue
+
+            qv = self.type2tfidf[ent_type].transform([word])
+            sims = cosine_similarity(qv, self.type2vecs[ent_type])[0]
+            idx = sims.argmax()
+
+            if sims[idx] >= threshold:
+                result.setdefault(ent_type, []).append(
+                    self.type2ents[ent_type][idx]
+                )
+
+        return result
+
+    def search_best(self, query, ent_types=None, threshold=0.3):
+        """
+        🔥 当 NER 完全失败时的兜底：
+        在多个实体类型全集中找【全局最相似】的实体
+        """
+        best_ent = None
+        best_type = None
+        best_score = 0.0
+
+        if ent_types is None:
+            ent_types = self.type2tfidf.keys()
+
+        for ent_type in ent_types:
+            if ent_type not in self.type2tfidf:
+                continue
+
+            tfidf = self.type2tfidf[ent_type]
+            ents = self.type2ents[ent_type]
+            vecs = self.type2vecs[ent_type]
+
+            qv = tfidf.transform([query])
+            sims = cosine_similarity(qv, vecs)[0]
+
+            idx = sims.argmax()
+            score = sims[idx]
+
+            if score > best_score:
+                best_score = score
+                best_ent = ents[idx]
+                best_type = ent_type
+
+        if best_score >= threshold:
+            return best_type, best_ent
+
+        return None, None
+
+# ===============================
+# 3. 对外统一接口（关键）
+# ===============================
+
+def get_ner_result(model, tokenizer, text, rule_ner, tfidf_aligner, device, idx2tag):
+    """
+    优先规则 NER
+    规则 NER 失败 → TF-IDF 全量兜底
+    """
+
+    # ① 规则 NER
+    ner_raw = rule_ner.find(text)
+
+    if ner_raw:
+        return tfidf_aligner.align(ner_raw)
+
+    # ② 兜底：对所有实体类型做全量模糊搜索
+    fallback_type, fallback_ent = tfidf_aligner.search_best(
+        query=text,
+        ent_types=rule_ner.entity_types,
+        threshold=0.3,
+    )
+
+    if fallback_ent:
+        return {fallback_type: [fallback_ent]}
+
+    return {}

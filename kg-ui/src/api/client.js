@@ -1,8 +1,9 @@
 // src/api/client.js
 import { BASE_URL } from "../components/Constant";
+import { QA_BASE_URL } from "../components/Constant";
 
-async function postApi(endpoint, body) {
-  const res = await fetch(`${BASE_URL}/${endpoint}`, {
+async function postApi(endpoint, body, base_url = BASE_URL) {
+  const res = await fetch(`${base_url}/${endpoint}`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(body),
@@ -25,7 +26,7 @@ async function postApi(endpoint, body) {
 // 期望返回 { answer, evidence, subgraph, focusNodeIds }
 export async function qa(query) {
   if (!query?.trim()) throw new Error("Query 不能为空");
-  return postApi("qa", { query: query.trim() });
+  return postApi("qa", { query: query.trim() }, QA_BASE_URL);
 }
 
 // 期望返回 { items, subgraph, focusNodeIds }

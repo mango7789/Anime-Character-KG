@@ -1,5 +1,30 @@
 ## Anime Characters Knowledge Graph
 
+### 数据爬取与知识抽取
+```
+cd kg-extract
+```
+
+爬取动画信息
+```
+python moegirl_anime.py
+```
+
+爬取角色信息（按动画归类）
+```
+python moegirl_anime_character.py
+```
+
+抽取动画知识
+修改input_path为爬虫的output_path
+```
+python extract_tuple_anime.py
+```
+
+抽取角色知识
+```
+python extract_tuple_character.py
+```
 
 ### 前端
 
@@ -39,6 +64,8 @@ python run.py
 ```
 
 ### 问答
+```
 cd kg-chat
 python anime_kgqa.py
+```
 会对用户输入的prompt进行实体识别和意图识别，把识别出的字段按照规则在知识图谱中搜索，最后给大模型组织语言

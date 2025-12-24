@@ -16,7 +16,9 @@ export default function Sidebar({ mode, setMode }) {
         />
         <div>
           <div className="brand-title">Anime Character KG</div>
-          <div className="brand-sub" style={{fontSize: 11}}>基于热门动画角色的知识图谱系统</div>
+          <div className="brand-sub" style={{ fontSize: 11 }}>
+            基于热门动画角色的知识图谱系统
+          </div>
         </div>
       </div>
 
@@ -35,14 +37,21 @@ export default function Sidebar({ mode, setMode }) {
             [Modes.QA]: "输入自然语言问题，返回结构化答案及相关知识子图",
             [Modes.REC]: "输入用户或约束条件，返回推荐结果及可解释子图",
           };
+
+          // 如果是推荐模式按钮，不可点击
+          const disabled = m === Modes.REC;
+
           return (
             <button
               key={m}
               className={`mode-btn ${isActive ? "active" : ""}`}
-              onClick={() => setMode(m)}
+              onClick={() => !disabled && setMode(m)}
+              disabled={disabled}
               style={{
                 borderLeft: `4px solid ${MODE_COLORS[m]}`,
                 backgroundColor: isActive ? MODE_BG[m] : "transparent",
+                cursor: disabled ? "not-allowed" : "pointer",
+                opacity: disabled ? 0.5 : 1, // 灰掉不可点击的按钮
               }}
             >
               <div style={{ fontWeight: 650, color: MODE_COLORS[m] }}>

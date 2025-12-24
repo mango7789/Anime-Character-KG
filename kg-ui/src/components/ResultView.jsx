@@ -36,12 +36,8 @@ export default function ResultView({ mode, result, error }) {
         className="result-block"
         style={{ ...styles.block, borderColor: "rgba(255,107,107,.35)" }}
       >
-        <div style={{ ...styles.title, color: "var(--danger)" }}>
-          发生错误
-        </div>
-        <div style={styles.note}>
-          {String(error.message || error)}
-        </div>
+        <div style={{ ...styles.title, color: "var(--danger)" }}>发生错误</div>
+        <div style={styles.note}>{String(error.message || error)}</div>
       </div>
     );
   }
@@ -83,17 +79,30 @@ export default function ResultView({ mode, result, error }) {
   // ===== 路径查询模式 =====
   if (mode === "query") {
     const path = result.path || { nodes: [], links: [] };
+    const shortest = result.shortest || null;
+    // console.log(result);
 
     return (
       <div className="result-block" style={styles.block}>
         <div style={styles.title}>路径查询结果</div>
 
         <div style={styles.meta}>
-          节点 {path.nodes.length} · 边 {path.links.length}
+          节点数量 {path.nodes.length} · 边数量 {path.links.length}
         </div>
 
         {path.nodes.length === 0 && (
           <div style={styles.note}>未找到连接路径</div>
+        )}
+
+        {shortest && (
+          <div style={{ marginTop: 8 }}>
+            <div style={styles.note}>
+              最短路径（长度 {result.shortest.length}）
+            </div>
+            <div style={styles.note}>
+              {result.shortest.node_names.join(" → ")}
+            </div>
+          </div>
         )}
       </div>
     );
@@ -127,9 +136,7 @@ export default function ResultView({ mode, result, error }) {
               </div>
             </div>
 
-            {it.reason && (
-              <div style={styles.note}>{it.reason}</div>
-            )}
+            {it.reason && <div style={styles.note}>{it.reason}</div>}
           </div>
         ))}
       </div>

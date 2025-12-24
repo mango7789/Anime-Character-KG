@@ -345,7 +345,7 @@ class TFIDFAligner:
                 )
 
         return result
-
+    '''
     def search_best(self, query, ent_type="Character", threshold=0.3):
         """
         🔥 当 NER 完全失败时的兜底：
@@ -368,6 +368,43 @@ class TFIDFAligner:
             return ents[idx]
 
         return None
+    '''
+    def search_best(self, query, ent_types=None, threshold=0.3):
+        """
+        🔥 当 NER 完全失败时的兜底：
+        在多个实体类型全集中找【全局最相似】的实体
+        """
+        best_ent = None
+        best_type = None
+        best_score = 0.0
+
+        if ent_types is None:
+            ent_types = self.type2tfidf.keys()
+
+        for ent_type in ent_types:
+            if ent_type not in self.type2tfidf:
+                continue
+
+            tfidf = self.type2tfidf[ent_type]
+            ents = self.type2ents[ent_type]
+            vecs = self.type2vecs[ent_type]
+
+            qv = tfidf.transform([query])
+            sims = cosine_similarity(qv, vecs)[0]
+
+            idx = sims.argmax()
+            score = sims[idx]
+
+            if score > best_score:
+                best_score = score
+                best_ent = ents[idx]
+                best_type = ent_type
+
+        if best_score >= threshold:
+            return best_type, best_ent
+
+        return None, None
+
 # ===============================
 # 3. 对外统一接口（关键）
 # ===============================
@@ -383,7 +420,7 @@ def get_ner_result(model, tokenizer, text, rule_ner, tfidf_aligner, device, idx2
 
     if ner_raw:
         return tfidf_aligner.align(ner_raw)
-
+    '''
     # ② 兜底：Character 实体全集模糊搜索
     fallback = tfidf_aligner.search_best(
         query=text,
@@ -393,5 +430,15 @@ def get_ner_result(model, tokenizer, text, rule_ner, tfidf_aligner, device, idx2
 
     if fallback:
         return {"Character": [fallback]}
+    '''
+# ② 兜底：对所有实体类型做全量模糊搜索
+    fallback_type, fallback_ent = tfidf_aligner.search_best(
+        query=text,
+        ent_types=rule_ner.entity_types,
+        threshold=0.3,
+    )
+
+    if fallback_ent:
+        return {fallback_type: [fallback_ent]}
 
     return {}

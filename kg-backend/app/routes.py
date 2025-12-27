@@ -61,17 +61,22 @@ def _safe_json_loads(s: str) -> dict:
 
 def _intent_recognition(query: str, entities: dict) -> dict:
     system_prompt = """你是一个【动漫知识图谱查询解析器】。你的任务是从用户问题中识别：
-1. query_mode: 这次查询要走哪种执行模式（查询属性/查询实体/探索关系）
+1. query_mode: 这次查询要走哪种执行模式
 2. query_predicate: 用哪个属性/关系作为查询谓词
 3. source_entity_type: 查询从哪类实体节点出发
-4. result_value_type: 查询最终返回的值类型（属性/实体/关系）
+4. result_value_type: 查询最终返回的值类型
 
 每个字段均为枚举型：
-1. query_mode: get_property | get_entity | find_relation
-2. query_predicate: 必须来自给定 schema
-3. source_entity_type: Character | Work | Person | Organization
-4. result_value_type: Property | Character | Work | Person | Organization | Relationship
+1. query_mode: get_property | get_entity | find_path
+2. query_predicate: 必须来自给定 property_schema 或 relation_schema
+3. source_entity_type: 必须来自给定 entity_schema
+4. result_value_type: Property | Relationship | 来自给定 entity_schema
 除query_mode字段为单值外，其余字段允许多值（用|分隔）
+
+需要回答什么内容，决定了查询模式是什么：
+需要回答一个或多个property，或者需要描述一个entity -> get_property
+需要回答一个或多个entity -> get_entity
+需要回答一个relation类型 -> find_path
 
 严格按 JSON 格式输出（不要多余文字）：
 {
@@ -82,38 +87,33 @@ def _intent_recognition(query: str, entities: dict) -> dict:
 }
 
 ---
-【可用属性 schema】
-【Character 属性关系】
-- Alias
-- BirthDate
-- Gender
-- Height
-- Weight
-- EyeColor
-- HairColor
-- LivingStatus
-- Origin
-- ActiveArea
-- CharacterTag
-
+【entity_schema】
+- Work: Creative works such as animation, manga, novels, and games
+- Character: Fictional characters appearing in works
+- Person: Real-world individuals such as authors, voice actors, and directors
+- Organization: Real-world organizations such as production companies and committees
+- Group: In-universe organizations or groups that characters belong to
+- Location: In-universe locations appearing in fictional works
 ---
-【可用关系 schema】
-【Work 相关关系】
-- OriginalAuthor
-- ChiefDirector
-- SeriesComposition
-- CharacterDesigner
-- Music
-- ProductionCompany
-- Publisher
-- PublicationPeriod
-- FirstAiringDate
-- WorkCategory
-
-【Character 相关关系】
-- AppearsIn
-- VoiceBy
-- MemberOf
+【property_schema】
+- Alias: Alternative names, nicknames, or titles of the character
+- BirthDate: The character's date or time of birth
+- Gender: The gender of the character
+- Height: The character's height
+- Weight: The character's weight
+- EyeColor: The character's eye color
+- HairColor: The character's hair color
+- LivingStatus: The character's living or survival status in the story
+- HasPosition: Job or position the character has in the group
+- CharacterTag: Personality traits, attributes, or tags associated with the character
+---
+【relation_schema】
+【Character Relationship】
+- AppearsIn: The work in which the character primarily appears
+- VoiceBy: The voice actor who voices the character
+- MemberOf: Group, factions or organization the character belongs to
+- Origin: Place where the character originates
+- ActiveArea: Main area where the character is active
 - HasParent
 - HasFather
 - HasMother
@@ -148,6 +148,19 @@ def _intent_recognition(query: str, entities: dict) -> dict:
 - HasSpouse
 - IsPossessedBy
 - IsHostOf
+
+【Work Relationship】
+- OriginalAuthor: The original author of the work
+- ChiefDirector: The chief director or series director (commonly used in Japanese animation)
+- SeriesComposition: Responsible for overall story structure and script composition
+- CharacterDesigner: Responsible for character visual design
+- Music: Music composition or music production
+- ProductionCompany: The animation or film production company
+- Publisher: The publisher or production committee of the work
+- PublicationPeriod: The time span during which the work was published or serialized
+- FirstAiringDate: The date when the work was first aired or released
+- WorkCategory: Tags of the work (e.g. 黑暗題材、战斗题材)
+
 """
     user_prompt = f'用户输入：\n"{query}"\n\n实体识别：\n"{entities}"'
     raw = _call_llm(system_prompt, user_prompt, temperature=0.0)
@@ -198,8 +211,8 @@ def build_cypher_plan(
         return None, None
 
     def pick_second(anchor_name: str, anchor_type: str):
-        # second 只在 find_relation 强相关；其他模式尽量不引入噪声
-        if mode != "find_relation":
+        # second 只在 find_path 强相关；其他模式尽量不引入噪声
+        if mode != "find_path":
             return None, None
 
         # 同类型第二个优先
@@ -237,7 +250,7 @@ def build_cypher_plan(
 
     # ---- 2) 解析 predicate / result labels ----
     # find_relation 必须 Unknown（或空），这里强制归一化
-    if mode == "find_relation":
+    if mode == "find_path":
         pred_raw = "Unknown"
 
     preds = [p for p in _split_multi(pred_raw) if p.lower() != "unknown"]
@@ -246,8 +259,8 @@ def build_cypher_plan(
 
     plans = []
 
-    # ---- 3) find_relation：两实体之间探索关系（不指定 predicate）----
-    if mode == "find_relation":
+    # ---- 3) find_path：两实体之间探索关系（不指定 predicate）----
+    if mode == "find_path":
         # 没 second 就无法 between，退化成邻居兜底（但这一般说明 NER 没抽到第二实体）
         if second:
             plans.append(
@@ -293,9 +306,8 @@ def build_cypher_plan(
             ({"name": second, "type": second_type} if second else None),
         )
 
-    # ---- 4) get_property：查属性值（优先属性边）----
+    # ---- 4) get_property：查属性值 ----
     if mode == "get_property":
-        # predicate 为空时的兜底
         if not preds:
             plans.append(
                 {
@@ -310,7 +322,22 @@ def build_cypher_plan(
             )
             return plans, {"name": anchor, "type": anchor_type}, None
 
-        # plan1：只查属性边（ATTRIBUTE_RELATIONS）
+        # ✅ plan0：直接读节点属性（优先）
+        # 支持多 predicate：依次返回非空的那个
+        plans.append(
+            {
+                "plan_name": "node_property_direct",
+                "cypher": f"""
+                    MATCH {match_anchor(anchor_type)}
+                    RETURN a AS a, $preds AS preds,
+                           [p IN $preds WHERE a[p] IS NOT NULL | {{pred:p, value:a[p]}}] AS kvs
+                    LIMIT 1
+                """,
+                "params": {"a": anchor, "preds": preds},
+            }
+        )
+
+        # plan1：兼容“属性边”建模（如果未来有）
         plans.append(
             {
                 "plan_name": "property_edges_only",
@@ -320,14 +347,11 @@ def build_cypher_plan(
                     RETURN a, b, r
                     LIMIT 50
                 """,
-                "params": {
-                    "a": anchor,
-                    "preds": preds,
-                    "attr_rels": list(ATTRIBUTE_RELATIONS),
-                },
+                "params": {"a": anchor, "preds": preds, "attr_rels": list(ATTRIBUTE_RELATIONS)},
             }
         )
-        # plan2：放宽为通用谓词（有些“属性”可能被建成普通边）
+
+        # plan2：放宽为通用谓词
         plans.append(
             {
                 "plan_name": "property_by_predicate_fallback",
@@ -340,6 +364,7 @@ def build_cypher_plan(
                 "params": {"a": anchor, "preds": preds},
             }
         )
+
         # plan3：最后兜底邻居
         plans.append(
             {
@@ -352,6 +377,7 @@ def build_cypher_plan(
                 "params": {"a": anchor},
             }
         )
+
         return plans, {"name": anchor, "type": anchor_type}, None
 
     # ---- 5) get_entity：按 predicate 返回实体（可按 result_value_type 过滤）----
@@ -783,44 +809,67 @@ def qa_route():
     evidence_set = set()
     link_seen = set()
     MAX_EVIDENCE = 30
-    for record in result:
-        a_node = record["a"]
-        b_node = record["b"]
-        rel = record["r"]
+    if used_plan == "node_property_direct":
+        node_ids = {}
+        record0 = result[0]
+        a_node = record0["a"]
+        kvs = record0.get("kvs") or []
 
         _add_node(a_node)
-        _add_node(b_node)
 
-        rel_type = rel.type
-        rel_props = dict(rel.items())
-        src = rel.start_node.id
-        tgt = rel.end_node.id
+        a_name = _node_name(a_node)
+        a_label = _node_label(a_node)
 
-        # --- subgraph: 属性边写回节点；关系边进 links ---
-        if rel_type in ATTRIBUTE_RELATIONS:
-            a_id = a_node.id
-            b_name = _node_name(b_node)
-            if a_id in node_ids:
-                node_ids[a_id]["properties"][rel_type] = rel_props.get("value", b_name)
-        else:
-            key = (src, tgt, rel_type)
-            if key not in link_seen:
-                link_seen.add(key)
-                links.append(
-                    {
-                        "source": src,
-                        "target": tgt,
-                        "type": rel_type,
-                        "properties": rel_props,
-                    }
-                )
+        evidence_set = set()
+        for kv in kvs:
+            pred = kv.get("pred")
+            val = kv.get("value")
+            if pred is None:
+                continue
+            line = f"{a_name}({a_label}) 的 {pred} 是 {val}"
+            if line not in evidence_set:
+                evidence_set.add(line)
+                evidence.append(line)
+    else:
+        for record in result:
+            a_node = record["a"]
+            b_node = record["b"]
+            rel = record["r"]
 
-        line = build_evidence_line(a_node, b_node, rel, set(ATTRIBUTE_RELATIONS))
-        if line and line not in evidence_set:
-            evidence_set.add(line)
-            evidence.append(line)
-            if len(evidence) >= MAX_EVIDENCE:
-                break
+            _add_node(a_node)
+            _add_node(b_node)
+
+            rel_type = rel.type
+            rel_props = dict(rel.items())
+            src = rel.start_node.id
+            tgt = rel.end_node.id
+
+            # --- subgraph: 属性边写回节点；关系边进 links ---
+            if rel_type in ATTRIBUTE_RELATIONS:
+                a_id = a_node.id
+                b_name = _node_name(b_node)
+                if a_id in node_ids:
+                    node_ids[a_id]["properties"][rel_type] = rel_props.get("value", b_name)
+            else:
+                key = (src, tgt, rel_type)
+                if key not in link_seen:
+                    link_seen.add(key)
+                    links.append(
+                        {
+                            "source": src,
+                            "target": tgt,
+                            "type": rel_type,
+                            "properties": rel_props,
+                        }
+                    )
+
+            line = build_evidence_line(a_node, b_node, rel, set(ATTRIBUTE_RELATIONS))
+            if line and line not in evidence_set:
+                evidence_set.add(line)
+                evidence.append(line)
+                if len(evidence) >= MAX_EVIDENCE:
+                    break
+
     # print(evidence)
 
     # ========= ④ LLM 根据证据生成答案（严格基于 evidence）=========

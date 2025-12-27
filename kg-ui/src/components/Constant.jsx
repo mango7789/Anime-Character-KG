@@ -12,4 +12,4 @@ export const MODE_COLORS = {
 };
 
 export const BASE_URL = "http://10.176.40.144:5000/api";
-export const QA_BASE_URL = "http://10.176.40.144:5000/api";
+export const QA_BASE_URL = "http://10.230.34.148:5000/api";

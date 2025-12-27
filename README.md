@@ -30,7 +30,8 @@ python extract_tuple_character.py
 
 ```
 cd kg-ui
-npm i react-force-graph-2d
+npm install
+npm i react-force-graph-2d html-react-parser
 npm run dev
 ```
 
